@@ -1,0 +1,75 @@
+name: Daily PR Complexity Labeling
+
+on:
+  schedule:
+    # Run at 1am UTC every day
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    # Allow manual trigger with optional date override
+    inputs:
+      date:
+        description: 'Date to process (YYYY-MM-DD). Defaults to yesterday.'
+        required: false
+        type: string
+      force:
+        description: 'Re-analyze PRs even if already labeled'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  label-prs:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+
+      - name: Calculate target date
+        id: date
+        run: |
+          if [ -n "${{ inputs.date }}" ]; then
+            TARGET_DATE="${{ inputs.date }}"
+          else
+            # Get yesterday's date
+            TARGET_DATE=$(date -d "yesterday" +%Y-%m-%d)
+          fi
+          echo "target_date=$TARGET_DATE" >> $GITHUB_OUTPUT
+          echo "Processing PRs from: $TARGET_DATE"
+
+      - name: Label PRs with complexity
+        env:
+          # Use ORG_GITHUB_TOKEN (org-wide PAT) for accessing repos across the org
+          GITHUB_TOKEN: ${{ secrets.ORG_GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          FORCE_FLAG=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            FORCE_FLAG="--force"
+          fi
+          
+          complexity-cli batch-analyze \
+            --org your-org \
+            --since ${{ steps.date.outputs.target_date }} \
+            --until ${{ steps.date.outputs.target_date }} \
+            --label \
+            --workers 5 \
+            $FORCE_FLAG
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## PR Complexity Labeling Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Date processed:** ${{ steps.date.outputs.target_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Organization:** your-org" >> $GITHUB_STEP_SUMMARY
+

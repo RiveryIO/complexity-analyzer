@@ -7,10 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, Callable
 
+from dotenv import load_dotenv
 import typer
 
+# Load environment variables from .env file
+load_dotenv()
+
 from .config import get_github_token, get_openai_api_key, validate_owner_repo, validate_pr_number
-from .github import fetch_pr, GitHubAPIError, check_rate_limit
+from .github import fetch_pr, GitHubAPIError, check_rate_limit, update_complexity_label, has_complexity_label
 from .llm import OpenAIProvider, LLMError
 from .preprocess import process_diff, make_prompt_input
 from .io_safety import read_text_file, write_json_atomic, normalize_path
@@ -430,7 +434,7 @@ def batch_analyze(
     until: Optional[str] = typer.Option(
         None, "--until", help="End date (YYYY-MM-DD) for date range search"
     ),
-    output_file: Path = typer.Option(..., "--output", "-o", help="Output CSV file path"),
+    output_file: Optional[Path] = typer.Option(None, "--output", "-o", help="Output CSV file path (required unless --label is used)"),
     cache_file: Optional[Path] = typer.Option(None, "--cache", help="Cache file for PR list (used with date range)"),
     prompt_file: Optional[Path] = typer.Option(None, "--prompt-file", "-p", help="Path to custom prompt file (default: embedded prompt)"),
     model: str = typer.Option("gpt-5.2", "--model", "-m", help="OpenAI model name"),
@@ -440,13 +444,23 @@ def batch_analyze(
     sleep_seconds: float = typer.Option(0.7, "--sleep-seconds", help="Sleep between GitHub API calls"),
     resume: bool = typer.Option(True, "--resume/--no-resume", help="Resume from existing output file"),
     workers: int = typer.Option(1, "--workers", "-w", help="Number of parallel workers (default: 1 = sequential)"),
+    label: bool = typer.Option(False, "--label", "-l", help="Label PRs with complexity instead of CSV output"),
+    label_prefix: str = typer.Option("complexity:", "--label-prefix", help="Prefix for complexity labels (used with --label)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Re-analyze PRs even if they already have a complexity label"),
 ):
     """
     Batch analyze multiple PRs from a file or date range.
 
     Either --input-file OR (--org, --since, --until) must be provided.
 
-    Output is written to CSV with columns: pr_url, complexity, explanation.
+    By default, output is written to CSV with columns: pr_url, complexity, explanation.
+    Use --label to apply complexity labels to PRs instead of CSV output.
+    
+    When using --label:
+    - PRs that already have a complexity label are skipped
+    - Labels are applied in the format "complexity:N" (customizable with --label-prefix)
+    - No CSV output is generated unless --output is also specified
+    
     If interrupted, run the same command again to resume from where it stopped.
     
     Use --workers to enable parallel processing (e.g., --workers 5 for 5 parallel workers).
@@ -464,6 +478,11 @@ def batch_analyze(
             )
             raise typer.Exit(1)
 
+        # Require output_file unless --label is used
+        if not label and not output_file:
+            typer.echo("Error: --output is required unless --label is used", err=True)
+            raise typer.Exit(1)
+
         # Get credentials
         github_token = get_github_token()
         openai_key = get_openai_api_key()
@@ -471,6 +490,12 @@ def batch_analyze(
         if not openai_key:
             typer.echo("Error: OPENAI_API_KEY environment variable is required", err=True)
             typer.echo("Set it with: export OPENAI_API_KEY='your-key'", err=True)
+            raise typer.Exit(1)
+        
+        # GitHub token is required for labeling
+        if label and not github_token:
+            typer.echo("Error: GitHub token is required for labeling PRs", err=True)
+            typer.echo("Set it with: export GH_TOKEN='your-token' or export GITHUB_TOKEN='your-token'", err=True)
             raise typer.Exit(1)
         
         # Warn if GitHub token is missing (needed for private repos)
@@ -536,13 +561,20 @@ def batch_analyze(
             typer.echo("Error: --workers must be >= 1", err=True)
             raise typer.Exit(1)
 
-        # Run batch analysis
-        run_batch_analysis(
+        # Run batch analysis with labeling support
+        from .batch import run_batch_analysis_with_labels
+        
+        run_batch_analysis_with_labels(
             pr_urls=pr_urls,
             output_file=output_file,
             analyze_fn=analyze_fn,
             resume=resume,
             workers=workers,
+            label_prs=label,
+            label_prefix=label_prefix,
+            github_token=github_token,
+            timeout=timeout,
+            force=force,
         )
 
     except KeyboardInterrupt:
@@ -606,6 +638,170 @@ def rate_limit(
     except GitHubAPIError as e:
         typer.echo(f"GitHub API error: {e}", err=True)
         raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Unexpected error: {e}", err=True)
+        import traceback
+        if os.getenv("DEBUG"):
+            typer.echo(traceback.format_exc(), err=True)
+        raise typer.Exit(1)
+
+
+@app.command(name="label-pr")
+def label_pr(
+    pr_url: Optional[str] = typer.Argument(
+        None, help="GitHub PR URL. If not provided, will try to infer from GitHub Actions context."
+    ),
+    prompt_file: Optional[Path] = typer.Option(
+        None, "--prompt-file", "-p", help="Path to custom prompt file (default: embedded prompt)"
+    ),
+    model: str = typer.Option("gpt-5.2", "--model", "-m", help="OpenAI model name"),
+    timeout: float = typer.Option(120.0, "--timeout", "-t", help="Request timeout in seconds"),
+    max_tokens: int = typer.Option(50000, "--max-tokens", help="Maximum tokens for diff excerpt"),
+    hunks_per_file: int = typer.Option(2, "--hunks-per-file", help="Maximum hunks per file"),
+    sleep_seconds: float = typer.Option(
+        0.7, "--sleep-seconds", help="Sleep between GitHub API calls"
+    ),
+    label_prefix: str = typer.Option(
+        "complexity:", "--label-prefix", help="Prefix for the complexity label"
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Analyze but don't update label"),
+    openai_api_key: Optional[str] = typer.Option(None, "--openai-api-key", help="OpenAI API key"),
+    github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
+):
+    """
+    Analyze a GitHub PR and update its complexity label.
+
+    Computes the complexity score and sets a label like "complexity:7" on the PR.
+    Removes any existing complexity labels before adding the new one.
+
+    Environment variables:
+    - GH_TOKEN or GITHUB_TOKEN: GitHub API token (required for label updates)
+    - OPENAI_API_KEY: OpenAI API key (required)
+    """
+    try:
+        # Get PR URL
+        final_pr_url = pr_url
+        if not final_pr_url:
+            typer.echo(
+                "PR URL not provided, attempting to infer from GitHub Actions context...", err=True
+            )
+            final_pr_url = get_pr_url_from_context()
+            if not final_pr_url:
+                typer.echo("Error: Could not infer PR URL from context.", err=True)
+                typer.echo("Please provide the PR URL as an argument.", err=True)
+                raise typer.Exit(1)
+            typer.echo(f"Inferred PR URL: {final_pr_url}", err=True)
+
+        # Parse PR URL
+        owner, repo, pr = parse_pr_url(final_pr_url)
+        validate_owner_repo(owner, repo)
+        validate_pr_number(pr)
+
+        # Get credentials (arg takes precedence over env)
+        final_github_token = github_token or get_github_token()
+        final_openai_key = openai_api_key or get_openai_api_key()
+
+        if not final_openai_key:
+            typer.echo(
+                "Error: OPENAI_API_KEY environment variable or argument is required", err=True
+            )
+            typer.echo(
+                "Set it with: export OPENAI_API_KEY='your-key' or pass --openai-api-key", err=True
+            )
+            raise typer.Exit(1)
+
+        if not final_github_token:
+            typer.echo(
+                "Error: GitHub token is required to update labels", err=True
+            )
+            typer.echo(
+                "Set it with: export GH_TOKEN='your-token' or pass --github-token", err=True
+            )
+            raise typer.Exit(1)
+
+        # Load prompt
+        try:
+            prompt_text = load_prompt(prompt_file)
+        except FileNotFoundError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(1)
+
+        # Analyze PR
+        typer.echo(f"Analyzing PR {owner}/{repo}#{pr}...", err=True)
+        try:
+            output = analyze_pr_to_dict(
+                pr_url=final_pr_url,
+                prompt_text=prompt_text,
+                github_token=final_github_token,
+                openai_key=final_openai_key,
+                model=model,
+                timeout=timeout,
+                max_tokens=max_tokens,
+                hunks_per_file=hunks_per_file,
+                sleep_seconds=sleep_seconds,
+            )
+        except GitHubAPIError as e:
+            if e.status_code == 404:
+                typer.echo("Error: PR not found or not accessible", err=True)
+                typer.echo(f"  URL: https://github.com/{owner}/{repo}/pull/{pr}", err=True)
+            else:
+                typer.echo(f"GitHub API error: {e}", err=True)
+            raise typer.Exit(1)
+        except LLMError as e:
+            typer.echo(f"LLM error: {e}", err=True)
+            raise typer.Exit(1)
+        except InvalidResponseError as e:
+            typer.echo(f"Invalid LLM response: {e}", err=True)
+            raise typer.Exit(1)
+
+        complexity = output["score"]
+        typer.echo(f"Complexity score: {complexity}/10", err=True)
+        typer.echo(f"Explanation: {output['explanation']}", err=True)
+
+        # Update label
+        if dry_run:
+            label_name = f"{label_prefix}{complexity}"
+            typer.echo(f"Dry run: Would set label '{label_name}'", err=True)
+        else:
+            typer.echo("Updating PR label...", err=True)
+            try:
+                label_name = update_complexity_label(
+                    owner=owner,
+                    repo=repo,
+                    pr=pr,
+                    complexity=complexity,
+                    token=final_github_token,
+                    label_prefix=label_prefix,
+                    timeout=timeout,
+                )
+                typer.echo(f"Label set: {label_name}", err=True)
+            except GitHubAPIError as e:
+                typer.echo(f"Failed to update label: {e}", err=True)
+                raise typer.Exit(1)
+
+        # Output result as JSON
+        result = {
+            "score": complexity,
+            "explanation": output["explanation"],
+            "label": f"{label_prefix}{complexity}",
+            "pr": pr,
+            "repo": f"{owner}/{repo}",
+            "url": final_pr_url,
+            "dry_run": dry_run,
+        }
+        typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+        # Set GitHub Action outputs if available
+        if "GITHUB_OUTPUT" in os.environ:
+            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                f.write(f"score={complexity}\n")
+                f.write(f"label={label_prefix}{complexity}\n")
+
+    except KeyboardInterrupt:
+        typer.echo("\nInterrupted by user", err=True)
+        raise typer.Exit(130)
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.echo(f"Unexpected error: {e}", err=True)
         import traceback

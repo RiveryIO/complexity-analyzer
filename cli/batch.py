@@ -2,6 +2,7 @@
 
 import csv
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -11,8 +12,20 @@ import threading
 import typer
 import httpx
 
-from .github import search_closed_prs, GitHubAPIError
+from .github import search_closed_prs, GitHubAPIError, has_complexity_label, update_complexity_label
 from .io_safety import read_text_file, normalize_path
+
+# Regex to parse PR URL
+_OWNER_REPO_RE = re.compile(r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
+
+
+def parse_pr_url(url: str) -> Tuple[str, str, int]:
+    """Parse owner, repo, and PR number from GitHub PR URL."""
+    m = _OWNER_REPO_RE.match(url.strip())
+    if not m:
+        raise ValueError(f"Invalid PR URL: {url}")
+    owner, repo, pr_str = m.group(1), m.group(2), m.group(3)
+    return owner, repo, int(pr_str)
 
 
 def load_pr_urls_from_file(file_path: Path) -> List[str]:
@@ -502,3 +515,202 @@ def run_batch_analysis(
             raise typer.Exit(130)
 
     typer.echo(f"\n✓ Batch analysis complete! Results written to: {output_file}", err=True)
+
+
+def run_batch_analysis_with_labels(
+    pr_urls: List[str],
+    output_file: Optional[Path],
+    analyze_fn: Callable[[str], Dict[str, Any]],
+    resume: bool = True,
+    workers: int = 1,
+    label_prs: bool = False,
+    label_prefix: str = "complexity:",
+    github_token: Optional[str] = None,
+    timeout: float = 60.0,
+    force: bool = False,
+) -> None:
+    """
+    Run batch analysis with optional PR labeling support.
+    
+    Args:
+        pr_urls: List of PR URLs to analyze
+        output_file: Path to CSV output file (optional if label_prs is True)
+        analyze_fn: Function that takes pr_url and returns dict with 'score' and 'explanation'
+        resume: If True, skip already-completed PRs (from CSV or existing labels)
+        workers: Number of parallel workers (1 = sequential, >1 = parallel)
+        label_prs: If True, label PRs with complexity instead of (or in addition to) CSV
+        label_prefix: Prefix for complexity labels
+        github_token: GitHub token (required for labeling)
+        timeout: Timeout for GitHub API calls
+        force: If True, re-analyze PRs even if they already have a complexity label
+    """
+    # When labeling (and not forcing), filter out PRs that already have complexity labels
+    if label_prs and force:
+        typer.echo(f"Force mode: will re-analyze and overwrite existing labels", err=True)
+    elif label_prs:
+        typer.echo(f"Checking {len(pr_urls)} PRs for existing complexity labels...", err=True)
+        unlabeled_urls = []
+        already_labeled = 0
+        
+        for idx, pr_url in enumerate(pr_urls, 1):
+            if idx % 50 == 0 or idx == len(pr_urls):
+                typer.echo(f"  Checked {idx}/{len(pr_urls)} PRs...", err=True)
+            
+            try:
+                owner, repo, pr = parse_pr_url(pr_url)
+                existing_label = has_complexity_label(
+                    owner, repo, pr, github_token, label_prefix, timeout
+                )
+                if existing_label:
+                    already_labeled += 1
+                else:
+                    unlabeled_urls.append(pr_url)
+            except Exception as e:
+                # If we can't check, include it in the list to process
+                typer.echo(f"  Warning: Could not check labels for {pr_url}: {e}", err=True)
+                unlabeled_urls.append(pr_url)
+            
+            # Small delay to avoid rate limiting when checking labels
+            time.sleep(0.1)
+        
+        typer.echo(f"Found {already_labeled} PRs already labeled, {len(unlabeled_urls)} to process", err=True)
+        pr_urls = unlabeled_urls
+    
+    # Also check CSV for resume (if output_file is provided)
+    completed_in_csv: Set[str] = set()
+    if resume and output_file:
+        completed_in_csv = load_completed_prs(output_file)
+        if completed_in_csv:
+            typer.echo(f"Found {len(completed_in_csv)} PRs in CSV, will skip them", err=True)
+    
+    # Filter out PRs already in CSV
+    remaining = [url for url in pr_urls if url not in completed_in_csv]
+    total_original = len(pr_urls)
+    remaining_count = len(remaining)
+
+    if remaining_count == 0:
+        typer.echo("All PRs have already been processed!", err=True)
+        return
+    
+    mode_desc = "labeling" if label_prs else "analyzing"
+    if workers > 1:
+        typer.echo(f"{mode_desc.capitalize()} {remaining_count} PRs with {workers} parallel workers", err=True)
+    else:
+        typer.echo(f"{mode_desc.capitalize()} {remaining_count} PRs", err=True)
+    
+    # Thread-safe counter and lock
+    completed_lock = threading.Lock()
+    completed_count = [0]
+    labeled_count = [0]
+    
+    def process_single_pr(pr_url: str, idx: int) -> Tuple[str, Optional[int], Optional[str], Optional[str], Optional[Exception]]:
+        """Process a single PR: analyze and optionally label. Returns (url, complexity, explanation, label_applied, error)."""
+        try:
+            if workers == 1:
+                typer.echo(f"\n[{idx}/{remaining_count}] Analyzing {pr_url}...", err=True)
+            else:
+                typer.echo(f"[{idx}/{remaining_count}] Analyzing {pr_url}...", err=True)
+            
+            result = analyze_fn(pr_url)
+            
+            # Extract complexity and explanation
+            complexity = result.get("score", result.get("complexity", 0))
+            explanation = result.get("explanation", "")
+            
+            label_applied = None
+            
+            # Apply label if requested
+            if label_prs and github_token:
+                try:
+                    owner, repo, pr = parse_pr_url(pr_url)
+                    label_applied = update_complexity_label(
+                        owner, repo, pr, complexity, github_token, label_prefix, timeout
+                    )
+                except Exception as label_error:
+                    typer.echo(f"  Warning: Failed to apply label to {pr_url}: {label_error}", err=True)
+            
+            return pr_url, complexity, explanation, label_applied, None
+        except Exception as e:
+            return pr_url, None, None, None, e
+    
+    # Process PRs sequentially or in parallel
+    if workers == 1:
+        # Sequential processing
+        for idx, pr_url in enumerate(remaining, 1):
+            try:
+                pr_url_result, complexity, explanation, label_applied, error = process_single_pr(pr_url, idx)
+                
+                if error:
+                    if isinstance(error, GitHubAPIError) and error.status_code == 404:
+                        typer.echo(f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)", err=True)
+                    else:
+                        typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
+                    typer.echo("Continuing with next PR...", err=True)
+                    continue
+                
+                # Write to CSV if output_file is provided
+                if output_file:
+                    write_csv_row(output_file, pr_url_result, complexity, explanation)
+                
+                if label_applied:
+                    typer.echo(f"✓ Completed: complexity={complexity}, label={label_applied}", err=True)
+                else:
+                    typer.echo(f"✓ Completed: complexity={complexity}", err=True)
+                
+            except KeyboardInterrupt:
+                typer.echo(
+                    "\n\nInterrupted. Progress saved. Resume by running the same command again.",
+                    err=True,
+                )
+                raise typer.Exit(130)
+    else:
+        # Parallel processing
+        try:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                future_to_pr = {
+                    executor.submit(process_single_pr, pr_url, idx): (pr_url, idx)
+                    for idx, pr_url in enumerate(remaining, 1)
+                }
+
+                for future in as_completed(future_to_pr):
+                    pr_url, idx = future_to_pr[future]
+                    try:
+                        pr_url_result, complexity, explanation, label_applied, error = future.result()
+                        
+                        if error:
+                            if isinstance(error, GitHubAPIError) and error.status_code == 404:
+                                typer.echo(f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)", err=True)
+                            else:
+                                typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
+                            continue
+                        
+                        # Write to CSV if output_file is provided
+                        if output_file:
+                            write_csv_row(output_file, pr_url_result, complexity, explanation)
+                        
+                        with completed_lock:
+                            completed_count[0] += 1
+                            if label_applied:
+                                labeled_count[0] += 1
+                                typer.echo(f"✓ [{completed_count[0]}/{remaining_count}] {pr_url_result}: complexity={complexity}, label={label_applied}", err=True)
+                            else:
+                                typer.echo(f"✓ [{completed_count[0]}/{remaining_count}] {pr_url_result}: complexity={complexity}", err=True)
+                            
+                    except Exception as e:
+                        typer.echo(f"✗ Unexpected error processing {pr_url}: {e}", err=True)
+                        
+        except KeyboardInterrupt:
+            typer.echo(
+                "\n\nInterrupted. Progress saved. Resume by running the same command again.",
+                err=True,
+            )
+            raise typer.Exit(130)
+
+    # Summary
+    if label_prs:
+        if output_file:
+            typer.echo(f"\n✓ Batch complete! Labeled PRs and wrote results to: {output_file}", err=True)
+        else:
+            typer.echo(f"\n✓ Batch labeling complete!", err=True)
+    elif output_file:
+        typer.echo(f"\n✓ Batch analysis complete! Results written to: {output_file}", err=True)

@@ -292,6 +292,236 @@ def check_rate_limit(
         raise RuntimeError(f"Failed to check rate limit: {e}")
 
 
+def get_pr_labels(
+    owner: str,
+    repo: str,
+    pr: int,
+    token: Optional[str] = None,
+    timeout: float = 60.0,
+) -> List[str]:
+    """
+    Get all labels on a PR.
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        token: GitHub token (optional for public repos)
+        timeout: Request timeout in seconds
+
+    Returns:
+        List of label names
+    """
+    validate_owner_repo(owner, repo)
+    validate_pr_number(pr)
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    # PRs use the issues endpoint for labels
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr}/labels"
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(url, headers=headers)
+            response.raise_for_status()
+            labels = response.json()
+            return [label["name"] for label in labels]
+    except httpx.HTTPStatusError as e:
+        raise GitHubAPIError(
+            e.response.status_code,
+            e.response.text[:500],
+            url,
+        )
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to get PR labels: {e}")
+
+
+def add_pr_label(
+    owner: str,
+    repo: str,
+    pr: int,
+    label: str,
+    token: str,
+    timeout: float = 60.0,
+) -> None:
+    """
+    Add a label to a PR.
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        label: Label name to add
+        token: GitHub token (required - must have write access)
+        timeout: Request timeout in seconds
+    """
+    validate_owner_repo(owner, repo)
+    validate_pr_number(pr)
+
+    if not token:
+        raise ValueError("GitHub token is required to add labels")
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Authorization": f"Bearer {token}",
+    }
+
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr}/labels"
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(url, headers=headers, json={"labels": [label]})
+            response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise GitHubAPIError(
+            e.response.status_code,
+            e.response.text[:500],
+            url,
+        )
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to add PR label: {e}")
+
+
+def remove_pr_label(
+    owner: str,
+    repo: str,
+    pr: int,
+    label: str,
+    token: str,
+    timeout: float = 60.0,
+) -> None:
+    """
+    Remove a label from a PR.
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        label: Label name to remove
+        token: GitHub token (required - must have write access)
+        timeout: Request timeout in seconds
+    """
+    validate_owner_repo(owner, repo)
+    validate_pr_number(pr)
+
+    if not token:
+        raise ValueError("GitHub token is required to remove labels")
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Authorization": f"Bearer {token}",
+    }
+
+    # URL-encode the label name for the path
+    import urllib.parse
+    encoded_label = urllib.parse.quote(label, safe="")
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr}/labels/{encoded_label}"
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.delete(url, headers=headers)
+            # 404 is OK - label might not exist
+            if response.status_code == 404:
+                return
+            response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return  # Label doesn't exist, that's fine
+        raise GitHubAPIError(
+            e.response.status_code,
+            e.response.text[:500],
+            url,
+        )
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to remove PR label: {e}")
+
+
+def update_complexity_label(
+    owner: str,
+    repo: str,
+    pr: int,
+    complexity: int,
+    token: str,
+    label_prefix: str = "complexity:",
+    timeout: float = 60.0,
+) -> str:
+    """
+    Update the complexity label on a PR.
+
+    Removes any existing complexity labels and adds a new one with the given score.
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        complexity: Complexity score (1-10)
+        token: GitHub token (required - must have write access)
+        label_prefix: Prefix for complexity labels (default: "complexity:")
+        timeout: Request timeout in seconds
+
+    Returns:
+        The label name that was applied
+    """
+    validate_owner_repo(owner, repo)
+    validate_pr_number(pr)
+
+    if not 1 <= complexity <= 10:
+        raise ValueError(f"Complexity must be between 1 and 10, got: {complexity}")
+
+    # Get current labels
+    current_labels = get_pr_labels(owner, repo, pr, token, timeout)
+
+    # Remove any existing complexity labels
+    for label in current_labels:
+        if label.startswith(label_prefix):
+            remove_pr_label(owner, repo, pr, label, token, timeout)
+
+    # Add new complexity label
+    new_label = f"{label_prefix}{complexity}"
+    add_pr_label(owner, repo, pr, new_label, token, timeout)
+
+    return new_label
+
+
+def has_complexity_label(
+    owner: str,
+    repo: str,
+    pr: int,
+    token: Optional[str] = None,
+    label_prefix: str = "complexity:",
+    timeout: float = 60.0,
+) -> Optional[str]:
+    """
+    Check if a PR already has a complexity label.
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        token: GitHub token (optional for public repos)
+        label_prefix: Prefix for complexity labels (default: "complexity:")
+        timeout: Request timeout in seconds
+
+    Returns:
+        The existing complexity label name if found, None otherwise
+    """
+    validate_owner_repo(owner, repo)
+    validate_pr_number(pr)
+
+    labels = get_pr_labels(owner, repo, pr, token, timeout)
+    for label in labels:
+        if label.startswith(label_prefix):
+            return label
+    return None
+
+
 def search_closed_prs(
     org: str,
     since: datetime,
