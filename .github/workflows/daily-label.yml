@@ -5,10 +5,14 @@ on:
     # Run at 1am UTC every day
     - cron: '0 1 * * *'
   workflow_dispatch:
-    # Allow manual trigger with optional date override
+    # Allow manual trigger with optional date range
     inputs:
-      date:
-        description: 'Date to process (YYYY-MM-DD). Defaults to yesterday.'
+      since:
+        description: 'Start date (YYYY-MM-DD). Defaults to yesterday.'
+        required: false
+        type: string
+      until:
+        description: 'End date (YYYY-MM-DD). Defaults to same as start date.'
         required: false
         type: string
       force:
@@ -34,17 +38,28 @@ jobs:
         run: |
           pip install -e .
 
-      - name: Calculate target date
-        id: date
+      - name: Calculate date range
+        id: dates
         run: |
-          if [ -n "${{ inputs.date }}" ]; then
-            TARGET_DATE="${{ inputs.date }}"
+          # Set start date (since)
+          if [ -n "${{ inputs.since }}" ]; then
+            SINCE_DATE="${{ inputs.since }}"
           else
-            # Get yesterday's date
-            TARGET_DATE=$(date -d "yesterday" +%Y-%m-%d)
+            # Default to yesterday
+            SINCE_DATE=$(date -d "yesterday" +%Y-%m-%d)
           fi
-          echo "target_date=$TARGET_DATE" >> $GITHUB_OUTPUT
-          echo "Processing PRs from: $TARGET_DATE"
+          
+          # Set end date (until)
+          if [ -n "${{ inputs.until }}" ]; then
+            UNTIL_DATE="${{ inputs.until }}"
+          else
+            # Default to same as start date
+            UNTIL_DATE="$SINCE_DATE"
+          fi
+          
+          echo "since=$SINCE_DATE" >> $GITHUB_OUTPUT
+          echo "until=$UNTIL_DATE" >> $GITHUB_OUTPUT
+          echo "Processing PRs from $SINCE_DATE to $UNTIL_DATE"
 
       - name: Label PRs with complexity
         env:
@@ -59,8 +74,8 @@ jobs:
           
           complexity-cli batch-analyze \
             --org your-org \
-            --since ${{ steps.date.outputs.target_date }} \
-            --until ${{ steps.date.outputs.target_date }} \
+            --since ${{ steps.dates.outputs.since }} \
+            --until ${{ steps.dates.outputs.until }} \
             --label \
             --workers 5 \
             $FORCE_FLAG
@@ -70,6 +85,6 @@ jobs:
         run: |
           echo "## PR Complexity Labeling Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Date processed:** ${{ steps.date.outputs.target_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Date range:** ${{ steps.dates.outputs.since }} to ${{ steps.dates.outputs.until }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Organization:** your-org" >> $GITHUB_STEP_SUMMARY
 
