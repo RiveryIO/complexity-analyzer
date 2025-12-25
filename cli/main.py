@@ -13,16 +13,15 @@ import typer
 # Load environment variables from .env file
 load_dotenv()
 
-from .config import get_github_token, get_openai_api_key, validate_owner_repo, validate_pr_number
-from .github import fetch_pr, GitHubAPIError, check_rate_limit, update_complexity_label, has_complexity_label
-from .llm import OpenAIProvider, LLMError
-from .preprocess import process_diff, make_prompt_input
-from .io_safety import read_text_file, write_json_atomic, normalize_path
-from .scoring import InvalidResponseError
-from .batch import (
+from .config import get_github_token, get_openai_api_key, validate_owner_repo, validate_pr_number  # noqa: E402
+from .github import fetch_pr, GitHubAPIError, check_rate_limit, update_complexity_label  # noqa: E402
+from .llm import OpenAIProvider, LLMError  # noqa: E402
+from .preprocess import process_diff, make_prompt_input  # noqa: E402
+from .io_safety import read_text_file, write_json_atomic, normalize_path  # noqa: E402
+from .scoring import InvalidResponseError  # noqa: E402
+from .batch import (  # noqa: E402
     load_pr_urls_from_file,
     generate_pr_list_from_date_range,
-    run_batch_analysis,
 )
 
 app = typer.Typer(help="Analyze GitHub PR complexity using LLMs")

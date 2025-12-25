@@ -89,13 +89,15 @@ def test_search_closed_prs_success(mock_client_class):
     assert "https://github.com/org/repo/pull/124" in result
 
 
+@patch("cli.github.wait_for_rate_limit")
 @patch("cli.github.httpx.Client")
-def test_search_closed_prs_pagination(mock_client_class):
+def test_search_closed_prs_pagination(mock_client_class, mock_wait_rate_limit):
     """Test PR search with pagination."""
     mock_response_page1 = Mock()
     mock_response_page1.json.return_value = {
         "items": [{"html_url": f"https://github.com/org/repo/pull/{i}"} for i in range(100)],
     }
+    mock_response_page1.status_code = 200
     mock_response_page1.headers = {"X-RateLimit-Remaining": "100"}
     mock_response_page1.raise_for_status = Mock()
 
@@ -103,12 +105,11 @@ def test_search_closed_prs_pagination(mock_client_class):
     mock_response_page2.json.return_value = {
         "items": [{"html_url": "https://github.com/org/repo/pull/100"}],
     }
+    mock_response_page2.status_code = 200
     mock_response_page2.headers = {"X-RateLimit-Remaining": "99"}
     mock_response_page2.raise_for_status = Mock()
 
     mock_client = Mock()
-    mock_client.__enter__ = Mock(return_value=mock_client)
-    mock_client.__exit__ = Mock(return_value=False)
     mock_client.get.side_effect = [mock_response_page1, mock_response_page2]
     mock_client_class.return_value = mock_client
 

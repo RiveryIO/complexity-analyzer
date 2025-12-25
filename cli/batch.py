@@ -1,7 +1,6 @@
 """Batch analysis orchestration with resume capability."""
 
 import csv
-import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -137,7 +136,7 @@ def generate_pr_list_from_date_range(
             except GitHubAPIError as e:
                 # Check if it's the 1000 result limit error
                 if e.status_code == 422 and "1000 search results" in str(e.message).lower():
-                    typer.echo(f"Date range exceeds GitHub's 1000 result limit. Splitting into smaller ranges...", err=True)
+                    typer.echo("Date range exceeds GitHub's 1000 result limit. Splitting into smaller ranges...", err=True)
                     
                     # Calculate date range in days
                     date_range_days = (until - since).days + 1
@@ -182,7 +181,7 @@ def generate_pr_list_from_date_range(
                                 # Still hitting limit, need smaller chunks
                                 if chunk_days <= 1:
                                     # Can't split further - this is a very active org
-                                    typer.echo(f"Error: Even single-day chunks exceed 1000 PRs. Consider using repository-specific queries.", err=True)
+                                    typer.echo("Error: Even single-day chunks exceed 1000 PRs. Consider using repository-specific queries.", err=True)
                                     raise typer.Exit(1)
                                 
                                 # Reduce chunk size and retry this chunk (don't advance current_since)
@@ -546,7 +545,7 @@ def run_batch_analysis_with_labels(
     """
     # When labeling (and not forcing), filter out PRs that already have complexity labels
     if label_prs and force:
-        typer.echo(f"Force mode: will re-analyze and overwrite existing labels", err=True)
+        typer.echo("Force mode: will re-analyze and overwrite existing labels", err=True)
     elif label_prs:
         typer.echo(f"Checking {len(pr_urls)} PRs for existing complexity labels...", err=True)
         unlabeled_urls = []
@@ -585,7 +584,6 @@ def run_batch_analysis_with_labels(
     
     # Filter out PRs already in CSV
     remaining = [url for url in pr_urls if url not in completed_in_csv]
-    total_original = len(pr_urls)
     remaining_count = len(remaining)
 
     if remaining_count == 0:
@@ -711,6 +709,6 @@ def run_batch_analysis_with_labels(
         if output_file:
             typer.echo(f"\n✓ Batch complete! Labeled PRs and wrote results to: {output_file}", err=True)
         else:
-            typer.echo(f"\n✓ Batch labeling complete!", err=True)
+            typer.echo("\n✓ Batch labeling complete!", err=True)
     elif output_file:
         typer.echo(f"\n✓ Batch analysis complete! Results written to: {output_file}", err=True)
