@@ -256,6 +256,31 @@ https://github.com/owner/repo/pull/125,8,"Complex architectural changes across m
 3. **Analyze**: Sends formatted prompt to LLM with diff excerpt, stats, and title
 4. **Score**: Parses LLM response and returns complexity score (1-10) with explanation
 
+## Complexity Scoring Framework
+
+PRs are ranked by complexity on a scale of 1 to 10. When using complexity scores to compute team velocity, it is recommended to weight them using t-shirt sizes:
+
+| Score | Size | Weight | Description |
+|-------|------|--------|-------------|
+| 1-2 | XS | 0 | Trivial changes (typos, config tweaks, simple fixes) |
+| 3 | S | 1 | Small, straightforward changes |
+| 4 | M | 2 | Medium complexity, moderate effort |
+| 5-6 | L | 3 | Large changes, multiple components affected |
+| 7+ | XL | 4 | Complex architectural changes, high risk |
+
+**Example velocity calculation:**
+
+If a team completed 5 PRs with scores [2, 3, 4, 6, 8], the weighted velocity would be:
+- Score 2 (XS): 0
+- Score 3 (S): 1
+- Score 4 (M): 2
+- Score 6 (L): 3
+- Score 8 (XL): 4
+
+**Total velocity: 10 points**
+
+This weighting system helps normalize velocity measurements by giving appropriate credit for complex work while filtering out trivial changes that don't reflect meaningful engineering effort.
+
 ## Security
 
 - Secrets are never logged or persisted
