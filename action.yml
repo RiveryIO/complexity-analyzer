@@ -1,6 +1,6 @@
 name: 'PR Complexity Analyzer'
 description: 'Analyzes GitHub pull request complexity using LLMs'
-author: 'Complexity Analyzer'
+author: 'Complexity Analyzer Contributors'
 
 branding:
   icon: 'trending-up'

@@ -48,5 +48,5 @@ jobs:
             ${{ steps.complexity.outputs.explanation }}
             
             ---
-            *Analyzed by [Complexity Analyzer](https://github.com/your-org/complexity-analyzer)*
+            *Analyzed by Complexity Analyzer*
           edit-mode: replace

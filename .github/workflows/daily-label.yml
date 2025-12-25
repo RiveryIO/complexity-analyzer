@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
     # Allow manual trigger with optional date range
     inputs:
+      org:
+        description: 'GitHub organization name'
+        required: true
+        type: string
       since:
         description: 'Start date (YYYY-MM-DD). Defaults to yesterday.'
         required: false
@@ -24,7 +28,7 @@ on:
 jobs:
   label-prs:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -48,7 +52,7 @@ jobs:
             # Default to yesterday
             SINCE_DATE=$(date -d "yesterday" +%Y-%m-%d)
           fi
-          
+
           # Set end date (until)
           if [ -n "${{ inputs.until }}" ]; then
             UNTIL_DATE="${{ inputs.until }}"
@@ -56,14 +60,14 @@ jobs:
             # Default to same as start date
             UNTIL_DATE="$SINCE_DATE"
           fi
-          
+
           echo "since=$SINCE_DATE" >> $GITHUB_OUTPUT
           echo "until=$UNTIL_DATE" >> $GITHUB_OUTPUT
           echo "Processing PRs from $SINCE_DATE to $UNTIL_DATE"
 
       - name: Label PRs with complexity
         env:
-          # Use ORG_GITHUB_TOKEN (org-wide PAT) for accessing repos across the org
+          # Use an org-wide PAT for accessing repos across the org
           GITHUB_TOKEN: ${{ secrets.ORG_GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -71,9 +75,9 @@ jobs:
           if [ "${{ inputs.force }}" = "true" ]; then
             FORCE_FLAG="--force"
           fi
-          
+
           complexity-cli batch-analyze \
-            --org your-org \
+            --org ${{ inputs.org }} \
             --since ${{ steps.dates.outputs.since }} \
             --until ${{ steps.dates.outputs.until }} \
             --label \
@@ -86,5 +90,5 @@ jobs:
           echo "## PR Complexity Labeling Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Date range:** ${{ steps.dates.outputs.since }} to ${{ steps.dates.outputs.until }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Organization:** your-org" >> $GITHUB_STEP_SUMMARY
+          echo "- **Organization:** ${{ inputs.org }}" >> $GITHUB_STEP_SUMMARY
 

@@ -302,7 +302,8 @@ The repository includes a GitHub Actions workflow (`.github/workflows/daily-labe
 
 **Manual Trigger:**
 
-You can trigger the workflow manually from the GitHub Actions tab with optional parameters:
+You can trigger the workflow manually from the GitHub Actions tab with the following parameters:
+- `org`: GitHub organization name (required)
 - `since`: Start date (YYYY-MM-DD), defaults to yesterday
 - `until`: End date (YYYY-MM-DD), defaults to same as start date
 - `force`: Re-analyze PRs even if already labeled
