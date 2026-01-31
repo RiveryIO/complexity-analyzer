@@ -2,6 +2,7 @@
 
 import re
 import time
+import threading
 from datetime import datetime
 from typing import Dict, Any, Tuple, Optional, List, Callable
 import httpx
@@ -16,6 +17,227 @@ class GitHubAPIError(Exception):
         self.message = message
         self.url = url
         super().__init__(f"GitHub API error {status_code} for {url}: {message}")
+
+
+class TokenRotator:
+    """
+    Manages a pool of GitHub tokens and rotates between them when rate limits are hit.
+
+    Thread-safe implementation that tracks rate limit status for each token and
+    automatically selects the best available token for API requests.
+
+    Usage:
+        rotator = TokenRotator(["token1", "token2", "token3"])
+        token = rotator.get_token()  # Gets the best available token
+
+        # After a rate limit error:
+        rotator.mark_rate_limited(token, reset_timestamp)
+        token = rotator.get_token()  # Gets the next available token
+
+        # Update rate limit info from response headers:
+        rotator.update_rate_limit(token, remaining=50, reset=1234567890)
+    """
+
+    def __init__(self, tokens: List[str], api_type: str = "core"):
+        """
+        Initialize the token rotator.
+
+        Args:
+            tokens: List of GitHub tokens to rotate through
+            api_type: API type to track ("core" or "search")
+        """
+        if not tokens:
+            raise ValueError("At least one token is required")
+
+        # Remove duplicates while preserving order
+        seen = set()
+        self._tokens = []
+        for token in tokens:
+            if token and token not in seen:
+                seen.add(token)
+                self._tokens.append(token)
+
+        if not self._tokens:
+            raise ValueError("At least one non-empty token is required")
+
+        self._api_type = api_type
+        self._lock = threading.Lock()
+        self._current_index = 0
+
+        # Track rate limit status for each token
+        # {token: {"remaining": int, "reset": int, "rate_limited_until": int}}
+        self._token_status: Dict[str, Dict[str, int]] = {
+            token: {"remaining": -1, "reset": 0, "rate_limited_until": 0}
+            for token in self._tokens
+        }
+
+    @property
+    def token_count(self) -> int:
+        """Return the number of tokens in the pool."""
+        return len(self._tokens)
+
+    def get_token(self) -> str:
+        """
+        Get the best available token.
+
+        Returns a token that is not rate limited, or if all tokens are rate limited,
+        returns the token that will be available soonest.
+
+        Returns:
+            The best available GitHub token
+        """
+        with self._lock:
+            current_time = int(time.time())
+
+            # First, try to find a token that is not rate limited
+            best_token = None
+            best_remaining = -1
+            soonest_reset = float("inf")
+            soonest_reset_token = self._tokens[0]
+
+            for token in self._tokens:
+                status = self._token_status[token]
+                rate_limited_until = status.get("rate_limited_until", 0)
+
+                # Check if rate limit has expired
+                if rate_limited_until > 0 and current_time >= rate_limited_until:
+                    # Rate limit expired, reset the status
+                    status["rate_limited_until"] = 0
+                    status["remaining"] = -1  # Unknown, will be updated on next request
+
+                # If token is not rate limited
+                if status.get("rate_limited_until", 0) <= current_time:
+                    remaining = status.get("remaining", -1)
+
+                    # Prefer token with most remaining requests, or unknown (-1)
+                    if remaining == -1 or remaining > best_remaining:
+                        best_token = token
+                        best_remaining = remaining
+
+                # Track which token resets soonest (in case all are rate limited)
+                reset_time = status.get("rate_limited_until", 0)
+                if reset_time > 0 and reset_time < soonest_reset:
+                    soonest_reset = reset_time
+                    soonest_reset_token = token
+
+            if best_token:
+                return best_token
+
+            # All tokens are rate limited, return the one that resets soonest
+            return soonest_reset_token
+
+    def mark_rate_limited(self, token: str, reset_timestamp: int) -> None:
+        """
+        Mark a token as rate limited until the given reset timestamp.
+
+        Args:
+            token: The token that hit a rate limit
+            reset_timestamp: Unix timestamp when the rate limit resets
+        """
+        with self._lock:
+            if token in self._token_status:
+                self._token_status[token]["rate_limited_until"] = reset_timestamp
+                self._token_status[token]["remaining"] = 0
+
+    def update_rate_limit(self, token: str, remaining: int, reset: int) -> None:
+        """
+        Update rate limit information for a token from response headers.
+
+        Args:
+            token: The token used for the request
+            remaining: Number of remaining requests (from X-RateLimit-Remaining header)
+            reset: Reset timestamp (from X-RateLimit-Reset header)
+        """
+        with self._lock:
+            if token in self._token_status:
+                self._token_status[token]["remaining"] = remaining
+                self._token_status[token]["reset"] = reset
+
+                # If remaining is 0, mark as rate limited
+                if remaining <= 0 and reset > 0:
+                    self._token_status[token]["rate_limited_until"] = reset
+
+    def get_status(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get the current status of all tokens.
+
+        Returns:
+            Dict mapping token (redacted) to status info
+        """
+        with self._lock:
+            current_time = int(time.time())
+            result = {}
+            for i, token in enumerate(self._tokens):
+                status = self._token_status[token]
+                rate_limited_until = status.get("rate_limited_until", 0)
+
+                # Redact token for display (show first 4 chars only)
+                redacted = token[:4] + "..." if len(token) > 4 else "***"
+
+                result[f"token_{i+1} ({redacted})"] = {
+                    "remaining": status.get("remaining", -1),
+                    "reset": status.get("reset", 0),
+                    "rate_limited": rate_limited_until > current_time,
+                    "rate_limited_until": rate_limited_until if rate_limited_until > current_time else None,
+                }
+            return result
+
+    def wait_for_any_available(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+        max_wait: int = 3600,
+    ) -> str:
+        """
+        Wait until at least one token is available, then return it.
+
+        Args:
+            progress_callback: Optional callback for progress messages
+            max_wait: Maximum seconds to wait (default: 1 hour)
+
+        Returns:
+            An available token
+
+        Raises:
+            RuntimeError: If no token becomes available within max_wait
+        """
+        start_time = time.time()
+
+        while True:
+            current_time = int(time.time())
+
+            with self._lock:
+                # Find the soonest reset time
+                soonest_reset = float("inf")
+                any_available = False
+
+                for token in self._tokens:
+                    status = self._token_status[token]
+                    rate_limited_until = status.get("rate_limited_until", 0)
+
+                    if rate_limited_until <= current_time:
+                        any_available = True
+                        break
+
+                    if rate_limited_until < soonest_reset:
+                        soonest_reset = rate_limited_until
+
+            if any_available:
+                return self.get_token()
+
+            # Calculate wait time
+            wait_seconds = max(1, int(soonest_reset - current_time) + 1)
+
+            if time.time() - start_time + wait_seconds > max_wait:
+                raise RuntimeError(f"All tokens rate limited for more than {max_wait} seconds")
+
+            if progress_callback:
+                reset_time = datetime.fromtimestamp(soonest_reset)
+                progress_callback(
+                    f"All {len(self._tokens)} tokens rate limited. "
+                    f"Waiting {wait_seconds}s until reset at {reset_time.strftime('%H:%M:%S')}..."
+                )
+
+            time.sleep(min(wait_seconds, 60))  # Sleep in chunks of max 60s
 
 
 def wait_for_rate_limit(
@@ -230,6 +452,135 @@ def fetch_pr(
         owner, repo, pr, token, check_rate_limit_first=check_rate_limit_first, progress_callback=progress_callback
     )
     return diff_text, metadata
+
+
+def fetch_pr_with_rotation(
+    owner: str,
+    repo: str,
+    pr: int,
+    token_rotator: TokenRotator,
+    sleep_s: float = 0.7,
+    max_retries: int = 10,
+    progress_callback: Optional[Callable[[str], None]] = None,
+    timeout: float = 60.0,
+) -> Tuple[str, Dict[str, Any]]:
+    """
+    Fetch PR diff and metadata with automatic token rotation on rate limits.
+
+    Uses the TokenRotator to automatically switch to another token when a rate
+    limit is hit, enabling higher throughput when multiple tokens are available.
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        token_rotator: TokenRotator instance managing multiple tokens
+        sleep_s: Sleep between requests in seconds
+        max_retries: Maximum number of retry attempts across all tokens
+        progress_callback: Optional callback for progress messages
+        timeout: Request timeout in seconds
+
+    Returns:
+        Tuple of (diff_text, metadata_dict)
+
+    Raises:
+        GitHubAPIError: If all tokens are rate limited and max retries exceeded
+        RuntimeError: If request fails for non-rate-limit reasons
+    """
+    validate_owner_repo(owner, repo)
+    validate_pr_number(pr)
+
+    retry_count = 0
+
+    while retry_count < max_retries:
+        # Get the best available token
+        token = token_rotator.get_token()
+
+        try:
+            # Fetch diff
+            diff_text = fetch_pr_diff(
+                owner, repo, pr, token,
+                check_rate_limit_first=False,  # We handle rate limits via rotation
+                progress_callback=progress_callback,
+                timeout=timeout,
+            )
+
+            time.sleep(sleep_s)
+
+            # Fetch metadata
+            metadata = fetch_pr_metadata(
+                owner, repo, pr, token,
+                check_rate_limit_first=False,
+                progress_callback=progress_callback,
+                timeout=timeout,
+            )
+
+            return diff_text, metadata
+
+        except GitHubAPIError as e:
+            # Check if this is a rate limit error
+            if e.status_code == 403:
+                error_text = str(e.message).lower()
+                is_rate_limit = (
+                    "rate limit" in error_text or
+                    "api rate limit exceeded" in error_text or
+                    "secondary rate limit" in error_text
+                )
+
+                if is_rate_limit:
+                    # Try to extract reset timestamp from error message or use default
+                    reset_timestamp = int(time.time()) + 60  # Default: 1 minute
+
+                    # Check if there's a reset time in the response
+                    # The actual reset time should come from headers, but we can estimate
+                    if "secondary rate limit" in error_text:
+                        # Secondary limits are shorter - use exponential backoff
+                        reset_timestamp = int(time.time()) + (10 * (2 ** min(retry_count, 4)))
+                    else:
+                        # Primary rate limit - usually 1 hour window
+                        reset_timestamp = int(time.time()) + 60
+
+                    token_rotator.mark_rate_limited(token, reset_timestamp)
+
+                    if progress_callback:
+                        redacted = token[:4] + "..." if len(token) > 4 else "***"
+                        progress_callback(
+                            f"Token {redacted} rate limited for {owner}/{repo}#{pr}. "
+                            f"Rotating to next token (attempt {retry_count + 1}/{max_retries})..."
+                        )
+
+                    retry_count += 1
+
+                    # If we have multiple tokens, immediately try the next one
+                    if token_rotator.token_count > 1:
+                        continue
+
+                    # If only one token, wait for it to reset
+                    try:
+                        token = token_rotator.wait_for_any_available(
+                            progress_callback=progress_callback,
+                            max_wait=300,  # Max 5 minutes wait
+                        )
+                        continue
+                    except RuntimeError:
+                        raise GitHubAPIError(
+                            403,
+                            f"All tokens rate limited after {retry_count} retries",
+                            e.url,
+                        )
+                else:
+                    # Non-rate-limit 403 error
+                    raise
+            else:
+                # Non-403 error, re-raise
+                raise
+
+    # Exhausted all retries
+    raise GitHubAPIError(
+        403,
+        f"Rate limit exceeded after {max_retries} retries across all tokens",
+        f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr}",
+    )
 
 
 def check_rate_limit(

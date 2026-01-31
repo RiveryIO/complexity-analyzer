@@ -13,8 +13,8 @@ import typer
 # Load environment variables from .env file
 load_dotenv()
 
-from .config import get_github_token, get_openai_api_key, validate_owner_repo, validate_pr_number  # noqa: E402
-from .github import fetch_pr, GitHubAPIError, check_rate_limit, update_complexity_label  # noqa: E402
+from .config import get_github_token, get_github_tokens, get_openai_api_key, validate_owner_repo, validate_pr_number  # noqa: E402
+from .github import fetch_pr, fetch_pr_with_rotation, GitHubAPIError, check_rate_limit, update_complexity_label, TokenRotator  # noqa: E402
 from .llm import OpenAIProvider, LLMError  # noqa: E402
 from .preprocess import process_diff, make_prompt_input  # noqa: E402
 from .io_safety import read_text_file, write_json_atomic, normalize_path  # noqa: E402
@@ -64,6 +64,7 @@ def analyze_pr_to_dict(
     hunks_per_file: int = 2,
     sleep_seconds: float = 0.7,
     progress_callback: Optional[Callable[[str], None]] = None,
+    token_rotator: Optional[TokenRotator] = None,
 ) -> dict:
     """
     Analyze a GitHub PR and return result as dictionary.
@@ -74,7 +75,7 @@ def analyze_pr_to_dict(
     Args:
         pr_url: GitHub PR URL
         prompt_text: Prompt text for LLM
-        github_token: GitHub API token (optional)
+        github_token: GitHub API token (optional, ignored if token_rotator is provided)
         openai_key: OpenAI API key (required)
         model: OpenAI model name
         timeout: Request timeout in seconds
@@ -82,7 +83,8 @@ def analyze_pr_to_dict(
         hunks_per_file: Maximum hunks per file
         sleep_seconds: Sleep between GitHub API calls
         progress_callback: Optional callback for progress messages (e.g., rate limit warnings)
-        
+        token_rotator: Optional TokenRotator for automatic token rotation on rate limits
+
     Returns:
         Dict with keys: score, explanation, provider, model, tokens, timestamp,
         repo, pr, url, title
@@ -98,10 +100,18 @@ def analyze_pr_to_dict(
     validate_owner_repo(owner, repo)
     validate_pr_number(pr)
 
-    # Fetch PR
-    diff_text, meta = fetch_pr(
-        owner, repo, pr, github_token, sleep_s=sleep_seconds, progress_callback=progress_callback
-    )
+    # Fetch PR - use token rotator if available, otherwise use single token
+    if token_rotator:
+        diff_text, meta = fetch_pr_with_rotation(
+            owner, repo, pr, token_rotator,
+            sleep_s=sleep_seconds,
+            progress_callback=progress_callback,
+            timeout=timeout,
+        )
+    else:
+        diff_text, meta = fetch_pr(
+            owner, repo, pr, github_token, sleep_s=sleep_seconds, progress_callback=progress_callback
+        )
     
     title = (meta.get("title") or "").strip()
 
@@ -446,6 +456,11 @@ def batch_analyze(
     label: bool = typer.Option(False, "--label", "-l", help="Label PRs with complexity instead of CSV output"),
     label_prefix: str = typer.Option("complexity:", "--label-prefix", help="Prefix for complexity labels (used with --label)"),
     force: bool = typer.Option(False, "--force", "-f", help="Re-analyze PRs even if they already have a complexity label"),
+    github_tokens: Optional[str] = typer.Option(
+        None, "--github-tokens",
+        help="Comma-separated list of GitHub tokens for rotation on rate limits. "
+             "Can also be set via GH_TOKENS or GITHUB_TOKENS environment variables."
+    ),
 ):
     """
     Batch analyze multiple PRs from a file or date range.
@@ -454,16 +469,21 @@ def batch_analyze(
 
     By default, output is written to CSV with columns: pr_url, complexity, explanation.
     Use --label to apply complexity labels to PRs instead of CSV output.
-    
+
     When using --label:
     - PRs that already have a complexity label are skipped
     - Labels are applied in the format "complexity:N" (customizable with --label-prefix)
     - No CSV output is generated unless --output is also specified
-    
+
     If interrupted, run the same command again to resume from where it stopped.
-    
+
     Use --workers to enable parallel processing (e.g., --workers 5 for 5 parallel workers).
     Note: Parallel processing may hit rate limits faster; adjust --sleep-seconds if needed.
+
+    Token Rotation Mode:
+    When multiple GitHub tokens are provided (via --github-tokens or GH_TOKENS env var),
+    the tool automatically rotates between tokens when rate limits are hit. This allows
+    for higher throughput when processing large batches of PRs.
     """
     try:
         # Validate inputs
@@ -483,20 +503,41 @@ def batch_analyze(
             raise typer.Exit(1)
 
         # Get credentials
-        github_token = get_github_token()
         openai_key = get_openai_api_key()
 
         if not openai_key:
             typer.echo("Error: OPENAI_API_KEY environment variable is required", err=True)
             typer.echo("Set it with: export OPENAI_API_KEY='your-key'", err=True)
             raise typer.Exit(1)
-        
+
+        # Get GitHub tokens - CLI option takes precedence over environment
+        token_list: list[str] = []
+        if github_tokens:
+            # Parse comma-separated tokens from CLI
+            token_list = [t.strip() for t in github_tokens.split(",") if t.strip()]
+        else:
+            # Fall back to environment variables
+            token_list = get_github_tokens()
+
+        # Create TokenRotator if we have multiple tokens
+        token_rotator: Optional[TokenRotator] = None
+        github_token: Optional[str] = None
+
+        if len(token_list) > 1:
+            token_rotator = TokenRotator(token_list)
+            github_token = token_list[0]  # Use first token for non-rotatable operations
+            typer.echo(f"Token rotation enabled with {len(token_list)} tokens", err=True)
+        elif len(token_list) == 1:
+            github_token = token_list[0]
+        else:
+            github_token = None
+
         # GitHub token is required for labeling
         if label and not github_token:
             typer.echo("Error: GitHub token is required for labeling PRs", err=True)
             typer.echo("Set it with: export GH_TOKEN='your-token' or export GITHUB_TOKEN='your-token'", err=True)
             raise typer.Exit(1)
-        
+
         # Warn if GitHub token is missing (needed for private repos)
         if not github_token:
             typer.echo("Warning: GH_TOKEN or GITHUB_TOKEN not set. Private repos may fail with 404 errors.", err=True)
@@ -539,7 +580,7 @@ def batch_analyze(
         def progress_msg(msg: str) -> None:
             """Display progress messages."""
             typer.echo(msg, err=True)
-        
+
         def analyze_fn(pr_url: str) -> dict:
             """Wrapper for analyze_pr_to_dict that handles errors."""
             return analyze_pr_to_dict(
@@ -553,6 +594,7 @@ def batch_analyze(
                 hunks_per_file=hunks_per_file,
                 sleep_seconds=sleep_seconds,
                 progress_callback=progress_msg,
+                token_rotator=token_rotator,
             )
         
         # Validate workers

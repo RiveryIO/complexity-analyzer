@@ -13,6 +13,41 @@ def get_github_token() -> Optional[str]:
     return os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
 
 
+def get_github_tokens() -> list[str]:
+    """Get multiple GitHub tokens from environment.
+
+    Checks GH_TOKENS first (comma-separated), then falls back to single token.
+    Tokens can be comma-separated or newline-separated.
+
+    Environment variables (in order of priority):
+    - GH_TOKENS: Comma or newline-separated list of tokens
+    - GITHUB_TOKENS: Comma or newline-separated list of tokens
+    - GH_TOKEN: Single token (fallback)
+    - GITHUB_TOKEN: Single token (fallback)
+
+    Returns:
+        List of GitHub tokens (empty list if none found)
+    """
+    # Check for multiple tokens first
+    tokens_str = os.getenv("GH_TOKENS") or os.getenv("GITHUB_TOKENS")
+    if tokens_str:
+        # Support both comma and newline separators
+        tokens = []
+        for line in tokens_str.replace("\n", ",").split(","):
+            token = line.strip()
+            if token:
+                tokens.append(token)
+        if tokens:
+            return tokens
+
+    # Fall back to single token
+    single_token = get_github_token()
+    if single_token:
+        return [single_token]
+
+    return []
+
+
 def get_openai_api_key() -> Optional[str]:
     """Get OpenAI API key from environment."""
     return os.getenv("OPENAI_API_KEY")
