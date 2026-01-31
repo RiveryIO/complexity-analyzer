@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, Callable
+from typing import Callable, List, Optional, Tuple
 
 from dotenv import load_dotenv
 import typer
@@ -551,7 +551,7 @@ def batch_analyze(
             raise typer.Exit(1)
 
         # Get GitHub tokens - CLI option takes precedence over environment
-        token_list: list[str] = []
+        token_list = []  # type: List[str]
         if github_tokens:
             # Parse comma-separated tokens from CLI
             token_list = [t.strip() for t in github_tokens.split(",") if t.strip()]

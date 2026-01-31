@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Optional
+from typing import List, Optional
 
 
 def get_github_token() -> Optional[str]:
@@ -13,7 +13,7 @@ def get_github_token() -> Optional[str]:
     return os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
 
 
-def get_github_tokens() -> list[str]:
+def get_github_tokens() -> List[str]:
     """Get multiple GitHub tokens from environment.
 
     Checks GH_TOKENS first (comma-separated), then falls back to single token.
