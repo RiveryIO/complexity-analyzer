@@ -551,7 +551,7 @@ def batch_analyze(
             raise typer.Exit(1)
 
         # Get GitHub tokens - CLI option takes precedence over environment
-        token_list = []  # type: List[str]
+        token_list: List[str] = []
         if github_tokens:
             # Parse comma-separated tokens from CLI
             token_list = [t.strip() for t in github_tokens.split(",") if t.strip()]
