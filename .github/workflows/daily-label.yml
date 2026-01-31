@@ -67,7 +67,7 @@ jobs:
 
       - name: Label PRs with complexity
         env:
-          # Use an org-wide PAT for accessing repos across the org
+          # Requires a PAT with repo scope and SSO authorization for the target org
           GITHUB_TOKEN: ${{ secrets.ORG_GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
