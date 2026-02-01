@@ -1,6 +1,57 @@
 # Complexity CLI
 
-A command-line tool to analyze GitHub pull request complexity using LLMs. Supports single PR analysis, batch processing, and automatic labeling of PRs with complexity scores.
+A command-line tool that uses LLMs to analyze the complexity of GitHub pull requests. It helps engineering teams measure velocity in a way that actually reflects the work being done—not just lines of code changed.
+
+## Why Measure Complexity?
+
+Traditional engineering metrics like lines of code, number of commits, or PR count don't capture what really matters: **how hard was the work?**
+
+A 500-line PR that renames a variable across a codebase is not the same as a 50-line PR that fixes a subtle race condition. Yet simple metrics treat them the same—or worse, reward the trivial change for being "bigger."
+
+Complexity scoring flips this around. By analyzing what a PR actually does—the logic changes, the number of systems touched, the cognitive load required to review it—we get a score that better represents the engineering effort involved.
+
+This enables:
+
+- **Fairer velocity tracking** — Teams get credit for hard problems, not just high PR counts
+- **Better sprint planning** — Historical complexity data helps estimate future work
+- **Improved code review** — Reviewers can prioritize their time on genuinely complex changes
+- **Meaningful retrospectives** — Discuss what made certain PRs complex, not just how many shipped
+
+## How It Works
+
+1. **Fetch PR**: Downloads the PR diff and metadata from GitHub API
+2. **Process Diff**:
+   - Redacts secrets and emails
+   - Filters out binary files, lockfiles, and vendor directories
+   - Truncates to token limit while preserving structure
+   - Builds statistics (additions, deletions, file counts, languages)
+3. **Analyze**: Sends formatted prompt to LLM with diff excerpt, stats, and title
+4. **Score**: Parses LLM response and returns complexity score (1-10) with explanation
+
+## Complexity Scoring Framework
+
+PRs are scored on a scale of 1 to 10. When computing team velocity, we recommend weighting scores using t-shirt sizes:
+
+| Score | Size | Weight | Description |
+|-------|------|--------|-------------|
+| 1-2 | XS | 0 | Trivial changes (typos, config tweaks, simple fixes) |
+| 3 | S | 1 | Small, straightforward changes |
+| 4 | M | 2 | Medium complexity, moderate effort |
+| 5-6 | L | 3 | Large changes, multiple components affected |
+| 7+ | XL | 4 | Complex architectural changes, high risk |
+
+**Example velocity calculation:**
+
+If a team completed 5 PRs with scores [2, 3, 4, 6, 8], the weighted velocity would be:
+- Score 2 (XS): 0
+- Score 3 (S): 1
+- Score 4 (M): 2
+- Score 6 (L): 3
+- Score 8 (XL): 4
+
+**Total velocity: 10 points**
+
+This weighting system normalizes velocity by giving appropriate credit for complex work while filtering out trivial changes that don't reflect meaningful engineering effort.
 
 ## Installation
 
@@ -244,42 +295,6 @@ https://github.com/owner/repo/pull/123,5,"Multiple modules/services with non-tri
 https://github.com/owner/repo/pull/124,3,"Simple refactoring with minimal changes"
 https://github.com/owner/repo/pull/125,8,"Complex architectural changes across multiple services"
 ```
-
-## How It Works
-
-1. **Fetch PR**: Downloads the PR diff and metadata from GitHub API
-2. **Process Diff**: 
-   - Redacts secrets and emails
-   - Filters out binary files, lockfiles, and vendor directories
-   - Truncates to token limit while preserving structure
-   - Builds statistics (additions, deletions, file counts, languages)
-3. **Analyze**: Sends formatted prompt to LLM with diff excerpt, stats, and title
-4. **Score**: Parses LLM response and returns complexity score (1-10) with explanation
-
-## Complexity Scoring Framework
-
-PRs are ranked by complexity on a scale of 1 to 10. When using complexity scores to compute team velocity, it is recommended to weight them using t-shirt sizes:
-
-| Score | Size | Weight | Description |
-|-------|------|--------|-------------|
-| 1-2 | XS | 0 | Trivial changes (typos, config tweaks, simple fixes) |
-| 3 | S | 1 | Small, straightforward changes |
-| 4 | M | 2 | Medium complexity, moderate effort |
-| 5-6 | L | 3 | Large changes, multiple components affected |
-| 7+ | XL | 4 | Complex architectural changes, high risk |
-
-**Example velocity calculation:**
-
-If a team completed 5 PRs with scores [2, 3, 4, 6, 8], the weighted velocity would be:
-- Score 2 (XS): 0
-- Score 3 (S): 1
-- Score 4 (M): 2
-- Score 6 (L): 3
-- Score 8 (XL): 4
-
-**Total velocity: 10 points**
-
-This weighting system helps normalize velocity measurements by giving appropriate credit for complex work while filtering out trivial changes that don't reflect meaningful engineering effort.
 
 ## Security
 
