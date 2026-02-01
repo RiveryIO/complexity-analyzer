@@ -8,8 +8,7 @@ from typer.testing import CliRunner
 
 from cli.main import app
 
-# Use mix_stderr=False to separate stdout/stderr, and create runner without color
-runner = CliRunner(mix_stderr=False)
+runner = CliRunner()
 
 
 def strip_ansi(text: str) -> str:
