@@ -19,6 +19,7 @@ from .github import (
     search_closed_prs,
     update_complexity_label,
 )
+from .csv_handler import CSVBatchWriter
 from .io_safety import normalize_path, read_text_file
 from .utils import parse_pr_url
 
@@ -478,32 +479,89 @@ def run_batch_analysis(
         except Exception as e:
             return pr_url, None, None, e
 
-    # Process PRs sequentially or in parallel
-    if workers == 1:
-        # Sequential processing (original behavior)
-        for idx, pr_url in enumerate(remaining, 1):
+    # Use thread-safe CSV writer for all cases
+    csv_writer = CSVBatchWriter(output_file)
+
+    try:
+        # Process PRs sequentially or in parallel
+        if workers == 1:
+            # Sequential processing (original behavior)
+            for idx, pr_url in enumerate(remaining, 1):
+                try:
+                    pr_url_result, complexity, explanation, error = process_single_pr(pr_url, idx)
+
+                    if error:
+                        # Handle 404 errors (PR not found) with a clearer message
+                        if isinstance(error, GitHubAPIError) and error.status_code == 404:
+                            typer.echo(
+                                f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)",
+                                err=True,
+                            )
+                            typer.echo(
+                                "  This may be a private repo - ensure GH_TOKEN or GITHUB_TOKEN is set with proper access",
+                                err=True,
+                            )
+                        else:
+                            typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
+                        typer.echo("Continuing with next PR...", err=True)
+                        continue
+
+                    # Write to CSV using thread-safe writer
+                    csv_writer.add_row(pr_url_result, complexity, explanation)
+                    typer.echo(f"✓ Completed: complexity={complexity}", err=True)
+
+                except KeyboardInterrupt:
+                    typer.echo(
+                        "\n\nInterrupted. Progress saved. Resume by running the same command again.",
+                        err=True,
+                    )
+                    raise typer.Exit(130)
+        else:
+            # Parallel processing
             try:
-                pr_url_result, complexity, explanation, error = process_single_pr(pr_url, idx)
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    # Submit all tasks
+                    future_to_pr = {
+                        executor.submit(process_single_pr, pr_url, idx): (pr_url, idx)
+                        for idx, pr_url in enumerate(remaining, 1)
+                    }
 
-                if error:
-                    # Handle 404 errors (PR not found) with a clearer message
-                    if isinstance(error, GitHubAPIError) and error.status_code == 404:
-                        typer.echo(
-                            f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)",
-                            err=True,
-                        )
-                        typer.echo(
-                            "  This may be a private repo - ensure GH_TOKEN or GITHUB_TOKEN is set with proper access",
-                            err=True,
-                        )
-                    else:
-                        typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
-                    typer.echo("Continuing with next PR...", err=True)
-                    continue
+                    # Process results as they complete
+                    for future in as_completed(future_to_pr):
+                        pr_url, idx = future_to_pr[future]
+                        try:
+                            pr_url_result, complexity, explanation, error = future.result()
 
-                # Write to CSV
-                write_csv_row(output_file, pr_url_result, complexity, explanation)
-                typer.echo(f"✓ Completed: complexity={complexity}", err=True)
+                            if error:
+                                # Handle 404 errors (PR not found) with a clearer message
+                                if isinstance(error, GitHubAPIError) and error.status_code == 404:
+                                    typer.echo(
+                                        f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)",
+                                        err=True,
+                                    )
+                                    typer.echo(
+                                        "  This may be a private repo - ensure GH_TOKEN or GITHUB_TOKEN is set with proper access",
+                                        err=True,
+                                    )
+                                else:
+                                    typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
+                                typer.echo("Continuing with next PR...", err=True)
+                                continue
+
+                            # Write to CSV using thread-safe writer
+                            csv_writer.add_row(pr_url_result, complexity, explanation)
+
+                            with completed_lock:
+                                completed_count[0] += 1
+                                typer.echo(
+                                    f"✓ [{completed_count[0]}/{remaining_count}] Completed {pr_url_result}: complexity={complexity}",
+                                    err=True,
+                                )
+
+                        except (RuntimeError, ValueError) as e:
+                            typer.echo(f"✗ Unexpected error processing {pr_url}: {e}", err=True)
+                            logger.debug(f"Thread error for {pr_url}", exc_info=True)
+                            typer.echo("Continuing with next PR...", err=True)
 
             except KeyboardInterrupt:
                 typer.echo(
@@ -511,59 +569,9 @@ def run_batch_analysis(
                     err=True,
                 )
                 raise typer.Exit(130)
-    else:
-        # Parallel processing
-        try:
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks
-                future_to_pr = {
-                    executor.submit(process_single_pr, pr_url, idx): (pr_url, idx)
-                    for idx, pr_url in enumerate(remaining, 1)
-                }
-
-                # Process results as they complete
-                for future in as_completed(future_to_pr):
-                    pr_url, idx = future_to_pr[future]
-                    try:
-                        pr_url_result, complexity, explanation, error = future.result()
-
-                        if error:
-                            # Handle 404 errors (PR not found) with a clearer message
-                            if isinstance(error, GitHubAPIError) and error.status_code == 404:
-                                typer.echo(
-                                    f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)",
-                                    err=True,
-                                )
-                                typer.echo(
-                                    "  This may be a private repo - ensure GH_TOKEN or GITHUB_TOKEN is set with proper access",
-                                    err=True,
-                                )
-                            else:
-                                typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
-                            typer.echo("Continuing with next PR...", err=True)
-                            continue
-
-                        # Write to CSV (atomic writes are thread-safe)
-                        write_csv_row(output_file, pr_url_result, complexity, explanation)
-
-                        with completed_lock:
-                            completed_count[0] += 1
-                            typer.echo(
-                                f"✓ [{completed_count[0]}/{remaining_count}] Completed {pr_url_result}: complexity={complexity}",
-                                err=True,
-                            )
-
-                    except (RuntimeError, ValueError) as e:
-                        typer.echo(f"✗ Unexpected error processing {pr_url}: {e}", err=True)
-                        logger.debug(f"Thread error for {pr_url}", exc_info=True)
-                        typer.echo("Continuing with next PR...", err=True)
-
-        except KeyboardInterrupt:
-            typer.echo(
-                "\n\nInterrupted. Progress saved. Resume by running the same command again.",
-                err=True,
-            )
-            raise typer.Exit(130)
+    finally:
+        # Ensure all buffered rows are written to disk
+        csv_writer.close()
 
     typer.echo(f"\n✓ Batch analysis complete! Results written to: {output_file}", err=True)
 
@@ -693,36 +701,98 @@ def run_batch_analysis_with_labels(
         except Exception as e:
             return pr_url, None, None, None, e
 
-    # Process PRs sequentially or in parallel
-    if workers == 1:
-        # Sequential processing
-        for idx, pr_url in enumerate(remaining, 1):
-            try:
-                pr_url_result, complexity, explanation, label_applied, error = process_single_pr(
-                    pr_url, idx
-                )
+    # Use thread-safe CSV writer if output_file is provided
+    csv_writer = CSVBatchWriter(output_file) if output_file else None
 
-                if error:
-                    if isinstance(error, GitHubAPIError) and error.status_code == 404:
+    try:
+        # Process PRs sequentially or in parallel
+        if workers == 1:
+            # Sequential processing
+            for idx, pr_url in enumerate(remaining, 1):
+                try:
+                    pr_url_result, complexity, explanation, label_applied, error = process_single_pr(
+                        pr_url, idx
+                    )
+
+                    if error:
+                        if isinstance(error, GitHubAPIError) and error.status_code == 404:
+                            typer.echo(
+                                f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)",
+                                err=True,
+                            )
+                        else:
+                            typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
+                        typer.echo("Continuing with next PR...", err=True)
+                        continue
+
+                    # Write to CSV using thread-safe writer
+                    if csv_writer:
+                        csv_writer.add_row(pr_url_result, complexity, explanation)
+
+                    if label_applied:
                         typer.echo(
-                            f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)",
-                            err=True,
+                            f"✓ Completed: complexity={complexity}, label={label_applied}", err=True
                         )
                     else:
-                        typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
-                    typer.echo("Continuing with next PR...", err=True)
-                    continue
+                        typer.echo(f"✓ Completed: complexity={complexity}", err=True)
 
-                # Write to CSV if output_file is provided
-                if output_file:
-                    write_csv_row(output_file, pr_url_result, complexity, explanation)
-
-                if label_applied:
+                except KeyboardInterrupt:
                     typer.echo(
-                        f"✓ Completed: complexity={complexity}, label={label_applied}", err=True
+                        "\n\nInterrupted. Progress saved. Resume by running the same command again.",
+                        err=True,
                     )
-                else:
-                    typer.echo(f"✓ Completed: complexity={complexity}", err=True)
+                    raise typer.Exit(130)
+        else:
+            # Parallel processing
+            try:
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    future_to_pr = {
+                        executor.submit(process_single_pr, pr_url, idx): (pr_url, idx)
+                        for idx, pr_url in enumerate(remaining, 1)
+                    }
+
+                    for future in as_completed(future_to_pr):
+                        pr_url, idx = future_to_pr[future]
+                        try:
+                            (
+                                pr_url_result,
+                                complexity,
+                                explanation,
+                                label_applied,
+                                error,
+                            ) = future.result()
+
+                            if error:
+                                if isinstance(error, GitHubAPIError) and error.status_code == 404:
+                                    typer.echo(
+                                        f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)",
+                                        err=True,
+                                    )
+                                else:
+                                    typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
+                                continue
+
+                            # Write to CSV using thread-safe writer
+                            if csv_writer:
+                                csv_writer.add_row(pr_url_result, complexity, explanation)
+
+                            with completed_lock:
+                                completed_count[0] += 1
+                                if label_applied:
+                                    labeled_count[0] += 1
+                                    typer.echo(
+                                        f"✓ [{completed_count[0]}/{remaining_count}] {pr_url_result}: complexity={complexity}, label={label_applied}",
+                                        err=True,
+                                    )
+                                else:
+                                    typer.echo(
+                                        f"✓ [{completed_count[0]}/{remaining_count}] {pr_url_result}: complexity={complexity}",
+                                        err=True,
+                                    )
+
+                        except (RuntimeError, ValueError) as e:
+                            typer.echo(f"✗ Unexpected error processing {pr_url}: {e}", err=True)
+                            logger.debug(f"Thread error for {pr_url}", exc_info=True)
 
             except KeyboardInterrupt:
                 typer.echo(
@@ -730,64 +800,10 @@ def run_batch_analysis_with_labels(
                     err=True,
                 )
                 raise typer.Exit(130)
-    else:
-        # Parallel processing
-        try:
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-                future_to_pr = {
-                    executor.submit(process_single_pr, pr_url, idx): (pr_url, idx)
-                    for idx, pr_url in enumerate(remaining, 1)
-                }
-
-                for future in as_completed(future_to_pr):
-                    pr_url, idx = future_to_pr[future]
-                    try:
-                        (
-                            pr_url_result,
-                            complexity,
-                            explanation,
-                            label_applied,
-                            error,
-                        ) = future.result()
-
-                        if error:
-                            if isinstance(error, GitHubAPIError) and error.status_code == 404:
-                                typer.echo(
-                                    f"⚠ Skipping {pr_url_result}: PR not found or inaccessible (404)",
-                                    err=True,
-                                )
-                            else:
-                                typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
-                            continue
-
-                        # Write to CSV if output_file is provided
-                        if output_file:
-                            write_csv_row(output_file, pr_url_result, complexity, explanation)
-
-                        with completed_lock:
-                            completed_count[0] += 1
-                            if label_applied:
-                                labeled_count[0] += 1
-                                typer.echo(
-                                    f"✓ [{completed_count[0]}/{remaining_count}] {pr_url_result}: complexity={complexity}, label={label_applied}",
-                                    err=True,
-                                )
-                            else:
-                                typer.echo(
-                                    f"✓ [{completed_count[0]}/{remaining_count}] {pr_url_result}: complexity={complexity}",
-                                    err=True,
-                                )
-
-                    except (RuntimeError, ValueError) as e:
-                        typer.echo(f"✗ Unexpected error processing {pr_url}: {e}", err=True)
-                        logger.debug(f"Thread error for {pr_url}", exc_info=True)
-
-        except KeyboardInterrupt:
-            typer.echo(
-                "\n\nInterrupted. Progress saved. Resume by running the same command again.",
-                err=True,
-            )
-            raise typer.Exit(130)
+    finally:
+        # Ensure all buffered rows are written to disk
+        if csv_writer:
+            csv_writer.close()
 
     # Summary
     if label_prs:

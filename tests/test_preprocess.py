@@ -26,6 +26,9 @@ def test_filter_file():
     assert filter_file("dist/bundle.js") is False
     assert filter_file("package-lock.json") is False
     assert filter_file("test.png") is False
+    assert filter_file("README.md") is False
+    assert filter_file("docs/guide.mdx") is False
+    assert filter_file(".cursor/rules/style.mdc") is False
 
 
 def test_parse_diff_sections():

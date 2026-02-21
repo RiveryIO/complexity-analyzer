@@ -1,7 +1,7 @@
 """Typed configuration classes for PR analysis."""
 
 from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
+from typing import Literal, Optional, TYPE_CHECKING
 
 from .constants import (
     DEFAULT_HUNKS_PER_FILE,
@@ -40,6 +40,19 @@ class AnalysisConfig:
     # Custom prompt (optional)
     prompt_text: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        if self.timeout <= 0:
+            raise ValueError(f"timeout must be positive, got {self.timeout}")
+        if self.max_tokens <= 0:
+            raise ValueError(f"max_tokens must be positive, got {self.max_tokens}")
+        if self.hunks_per_file <= 0:
+            raise ValueError(f"hunks_per_file must be positive, got {self.hunks_per_file}")
+        if self.sleep_seconds < 0:
+            raise ValueError(f"sleep_seconds cannot be negative, got {self.sleep_seconds}")
+        if not self.model or not self.model.strip():
+            raise ValueError("model cannot be empty")
+
 
 @dataclass
 class BatchConfig:
@@ -60,11 +73,23 @@ class BatchConfig:
     # Output
     output_file: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        if self.workers < 1:
+            raise ValueError(f"workers must be >= 1, got {self.workers}")
+        if self.label_prs and not self.label_prefix:
+            raise ValueError("label_prefix cannot be empty when label_prs is True")
+
 
 @dataclass
 class OutputConfig:
     """Configuration for output formatting."""
 
-    format: str = "json"  # "json" or "markdown"
+    format: Literal["json", "markdown"] = "json"
     output_file: Optional[str] = None
     write_github_output: bool = True
+
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        if self.format not in ("json", "markdown"):
+            raise ValueError(f"format must be 'json' or 'markdown', got '{self.format}'")

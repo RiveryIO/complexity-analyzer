@@ -8,7 +8,7 @@ from .constants import DEFAULT_HUNKS_PER_FILE, DEFAULT_MAX_TOKENS
 
 # File filtering patterns
 IGNORE_EXT_RE = re.compile(
-    r"(?:\.(?:png|jpg|jpeg|gif|webp|ico|pdf|zip|gz|bz2|xz|mp4|mov|mp3|wav|ogg|wasm|min\.js|map|lock)|package-lock\.json|pnpm-lock\.yaml)$",
+    r"(?:\.(?:png|jpg|jpeg|gif|webp|ico|pdf|zip|gz|bz2|xz|mp4|mov|mp3|wav|ogg|wasm|min\.js|map|lock|md|mdx|mdc|mdoc|markdown|rst)|package-lock\.json|pnpm-lock\.yaml)$",
     re.IGNORECASE,
 )
 IGNORE_PATH_RE = re.compile(
