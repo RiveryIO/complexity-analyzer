@@ -544,7 +544,9 @@ def run_batch_analysis(
                                         err=True,
                                     )
                                 else:
-                                    typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
+                                    typer.echo(
+                                        f"✗ Error analyzing {pr_url_result}: {error}", err=True
+                                    )
                                 typer.echo("Continuing with next PR...", err=True)
                                 continue
 
@@ -710,8 +712,8 @@ def run_batch_analysis_with_labels(
             # Sequential processing
             for idx, pr_url in enumerate(remaining, 1):
                 try:
-                    pr_url_result, complexity, explanation, label_applied, error = process_single_pr(
-                        pr_url, idx
+                    pr_url_result, complexity, explanation, label_applied, error = (
+                        process_single_pr(pr_url, idx)
                     )
 
                     if error:
@@ -769,7 +771,9 @@ def run_batch_analysis_with_labels(
                                         err=True,
                                     )
                                 else:
-                                    typer.echo(f"✗ Error analyzing {pr_url_result}: {error}", err=True)
+                                    typer.echo(
+                                        f"✗ Error analyzing {pr_url_result}: {error}", err=True
+                                    )
                                 continue
 
                             # Write to CSV using thread-safe writer
