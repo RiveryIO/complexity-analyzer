@@ -249,6 +249,100 @@ class TokenRotator:
             time.sleep(min(wait_seconds, 60))  # Sleep in chunks of max 60s
 
 
+def _fetch_all_pr_files(
+    owner: str,
+    repo: str,
+    pr: int,
+    token: Optional[str] = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> List[Dict[str, Any]]:
+    """
+    Fetch all files for a PR, paginating through all pages.
+
+    GitHub returns at most 100 files per page. This helper follows pagination
+    until an empty page is returned.
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        token: GitHub token (optional for public repos)
+        timeout: Request timeout in seconds
+
+    Returns:
+        List of file objects from the GitHub API
+    """
+    headers = build_github_headers(token)
+    base_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr}/files"
+    all_files: List[Dict[str, Any]] = []
+    page = 1
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            while True:
+                response = client.get(
+                    base_url,
+                    headers=headers,
+                    params={"per_page": GITHUB_PER_PAGE, "page": page},
+                )
+                response.raise_for_status()
+                files = response.json()
+
+                if not files:
+                    break
+
+                all_files.extend(files)
+
+                if len(files) < GITHUB_PER_PAGE:
+                    break
+
+                page += 1
+                time.sleep(0.1)  # Small delay to respect rate limits
+
+        return all_files
+    except httpx.HTTPStatusError as e:
+        raise GitHubAPIError(
+            e.response.status_code,
+            e.response.text[:500],
+            base_url,
+        )
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to fetch PR files: {e}")
+
+
+def _diff_from_files(files: List[Dict[str, Any]]) -> str:
+    """
+    Reconstruct a unified diff string from GitHub file objects.
+
+    Each file object from the /pulls/{pr}/files endpoint includes a ``patch``
+    field with the unified diff hunks for that file.  This function wraps each
+    patch in the standard ``diff --git`` / ``---`` / ``+++`` header so that the
+    result is parseable by ``parse_diff_sections()``.
+
+    Files where ``patch`` is missing (binary files, files too large for the API)
+    are silently skipped.
+
+    Args:
+        files: List of file objects from the GitHub files API
+
+    Returns:
+        Reconstructed unified diff string
+    """
+    parts: List[str] = []
+    for f in files:
+        patch = f.get("patch")
+        if not patch:
+            continue
+        filename = f.get("filename", "unknown")
+        parts.append(
+            f"diff --git a/{filename} b/{filename}\n"
+            f"--- a/{filename}\n"
+            f"+++ b/{filename}\n"
+            f"{patch}"
+        )
+    return "\n".join(parts)
+
+
 def wait_for_rate_limit(
     token: Optional[str] = None,
     api_type: str = "core",
@@ -344,6 +438,10 @@ def fetch_pr_diff(
             response.raise_for_status()
             return response.text
     except httpx.HTTPStatusError as e:
+        if e.response.status_code == 406:
+            # Diff too large — fall back to paginated files API
+            files = _fetch_all_pr_files(owner, repo, pr, token=token, timeout=timeout)
+            return _diff_from_files(files)
         raise GitHubAPIError(
             e.response.status_code,
             e.response.text[:500],
@@ -394,30 +492,22 @@ def fetch_pr_metadata(
 
     # Fetch PR metadata
     pr_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr}"
-    # Fetch files list
-    files_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr}/files"
 
     try:
         with httpx.Client(timeout=timeout) as client:
-            # Fetch both in parallel
             pr_response = client.get(pr_url, headers=headers)
             pr_response.raise_for_status()
             meta = pr_response.json()
 
-            # Small delay to respect rate limits
-            time.sleep(0.1)
-
-            files_response = client.get(files_url, headers=headers)
-            files_response.raise_for_status()
-            files = files_response.json()
-
-            meta["files"] = files
-            return meta
+        # Fetch all files (paginated)
+        files = _fetch_all_pr_files(owner, repo, pr, token=token, timeout=timeout)
+        meta["files"] = files
+        return meta
     except httpx.HTTPStatusError as e:
         raise GitHubAPIError(
             e.response.status_code,
             e.response.text[:500],
-            pr_url if "pr_response" not in locals() else files_url,
+            pr_url,
         )
     except httpx.RequestError as e:
         raise RuntimeError(f"Failed to fetch PR metadata: {e}")

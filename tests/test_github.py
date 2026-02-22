@@ -4,7 +4,13 @@ import time
 import pytest
 from datetime import datetime
 from unittest.mock import patch, Mock
-from cli.github import fetch_pr_diff, search_closed_prs, TokenRotator
+from cli.github import (
+    fetch_pr_diff,
+    search_closed_prs,
+    TokenRotator,
+    _fetch_all_pr_files,
+    _diff_from_files,
+)
 
 
 @patch("cli.github.httpx.Client")
@@ -298,3 +304,198 @@ class TestTokenRotator:
         # All tokens should be valid
         for token in tokens_retrieved:
             assert token in ["token1", "token2", "token3"]
+
+
+# _diff_from_files tests
+
+
+class TestDiffFromFiles:
+    """Tests for the _diff_from_files helper."""
+
+    def test_produces_correct_unified_diff(self):
+        """Test that file objects are converted to proper unified diff format."""
+        files = [
+            {
+                "filename": "src/app.py",
+                "patch": "@@ -1,3 +1,4 @@\n import os\n+import sys\n \n def main():",
+            },
+            {
+                "filename": "README.md",
+                "patch": "@@ -1 +1 @@\n-# Old Title\n+# New Title",
+            },
+        ]
+        result = _diff_from_files(files)
+
+        assert "diff --git a/src/app.py b/src/app.py" in result
+        assert "--- a/src/app.py" in result
+        assert "+++ b/src/app.py" in result
+        assert "+import sys" in result
+
+        assert "diff --git a/README.md b/README.md" in result
+        assert "--- a/README.md" in result
+        assert "+++ b/README.md" in result
+        assert "+# New Title" in result
+
+    def test_skips_files_without_patch(self):
+        """Test that binary files (no patch field) are skipped."""
+        files = [
+            {"filename": "image.png", "status": "added"},
+            {
+                "filename": "code.py",
+                "patch": "@@ -0,0 +1 @@\n+print('hello')",
+            },
+            {"filename": "binary.bin", "patch": None},
+        ]
+        result = _diff_from_files(files)
+
+        assert "image.png" not in result
+        assert "binary.bin" not in result
+        assert "diff --git a/code.py b/code.py" in result
+
+    def test_empty_files_list(self):
+        """Test that an empty file list returns an empty string."""
+        assert _diff_from_files([]) == ""
+
+
+# _fetch_all_pr_files tests
+
+
+class TestFetchAllPrFiles:
+    """Tests for the _fetch_all_pr_files paginated helper."""
+
+    @patch("cli.github.httpx.Client")
+    def test_single_page(self, mock_client_class):
+        """Test fetching files that fit in a single page."""
+        files = [{"filename": f"file{i}.py"} for i in range(30)]
+
+        mock_response = Mock()
+        mock_response.json.return_value = files
+        mock_response.raise_for_status = Mock()
+
+        mock_client = Mock()
+        mock_client.__enter__ = Mock(return_value=mock_client)
+        mock_client.__exit__ = Mock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_class.return_value = mock_client
+
+        result = _fetch_all_pr_files("owner", "repo", 1, token="tok")
+        assert len(result) == 30
+        # Only one request needed
+        assert mock_client.get.call_count == 1
+
+    @patch("cli.github.time.sleep")
+    @patch("cli.github.httpx.Client")
+    def test_multi_page_pagination(self, mock_client_class, mock_sleep):
+        """Test that multiple pages are fetched until an incomplete page."""
+        page1 = [{"filename": f"file{i}.py"} for i in range(100)]
+        page2 = [{"filename": f"file{i}.py"} for i in range(100, 150)]
+
+        resp1 = Mock()
+        resp1.json.return_value = page1
+        resp1.raise_for_status = Mock()
+
+        resp2 = Mock()
+        resp2.json.return_value = page2
+        resp2.raise_for_status = Mock()
+
+        mock_client = Mock()
+        mock_client.__enter__ = Mock(return_value=mock_client)
+        mock_client.__exit__ = Mock(return_value=False)
+        mock_client.get.side_effect = [resp1, resp2]
+        mock_client_class.return_value = mock_client
+
+        result = _fetch_all_pr_files("owner", "repo", 1, token="tok")
+        assert len(result) == 150
+        assert mock_client.get.call_count == 2
+
+    @patch("cli.github.time.sleep")
+    @patch("cli.github.httpx.Client")
+    def test_stops_on_empty_page(self, mock_client_class, mock_sleep):
+        """Test that pagination stops when an empty page is returned."""
+        page1 = [{"filename": f"file{i}.py"} for i in range(100)]
+        page2: list = []
+
+        resp1 = Mock()
+        resp1.json.return_value = page1
+        resp1.raise_for_status = Mock()
+
+        resp2 = Mock()
+        resp2.json.return_value = page2
+        resp2.raise_for_status = Mock()
+
+        mock_client = Mock()
+        mock_client.__enter__ = Mock(return_value=mock_client)
+        mock_client.__exit__ = Mock(return_value=False)
+        mock_client.get.side_effect = [resp1, resp2]
+        mock_client_class.return_value = mock_client
+
+        result = _fetch_all_pr_files("owner", "repo", 1, token="tok")
+        assert len(result) == 100
+
+
+# fetch_pr_diff 406 fallback tests
+
+
+class TestFetchPrDiff406Fallback:
+    """Tests for the 406 fallback in fetch_pr_diff."""
+
+    @patch("cli.github._fetch_all_pr_files")
+    @patch("cli.github.httpx.Client")
+    def test_falls_back_on_406(self, mock_client_class, mock_fetch_files):
+        """Test that a 406 response triggers the files API fallback."""
+        import httpx
+
+        # Simulate a 406 HTTPStatusError
+        mock_response = Mock(spec=httpx.Response)
+        mock_response.status_code = 406
+        mock_response.text = "Diff too large"
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "406 Not Acceptable",
+            request=Mock(),
+            response=mock_response,
+        )
+
+        mock_client = Mock()
+        mock_client.__enter__ = Mock(return_value=mock_client)
+        mock_client.__exit__ = Mock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_class.return_value = mock_client
+
+        # Set up the fallback
+        mock_fetch_files.return_value = [
+            {
+                "filename": "big_file.py",
+                "patch": "@@ -1,2 +1,3 @@\n import os\n+import sys\n pass",
+            },
+        ]
+
+        result = fetch_pr_diff("owner", "repo", 42, token="tok")
+
+        mock_fetch_files.assert_called_once_with("owner", "repo", 42, token="tok", timeout=120.0)
+        assert "diff --git a/big_file.py b/big_file.py" in result
+        assert "+import sys" in result
+
+    @patch("cli.github.httpx.Client")
+    def test_non_406_errors_still_raise(self, mock_client_class):
+        """Test that non-406 HTTP errors are raised normally."""
+        import httpx
+        from cli.github import GitHubAPIError
+
+        mock_response = Mock(spec=httpx.Response)
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "404 Not Found",
+            request=Mock(),
+            response=mock_response,
+        )
+
+        mock_client = Mock()
+        mock_client.__enter__ = Mock(return_value=mock_client)
+        mock_client.__exit__ = Mock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(GitHubAPIError) as exc_info:
+            fetch_pr_diff("owner", "repo", 42, token="tok")
+        assert exc_info.value.status_code == 404
