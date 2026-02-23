@@ -838,6 +838,7 @@ def run_batch_analysis_with_labels(
     github_token: Optional[str] = None,
     timeout: float = DEFAULT_TIMEOUT,
     force: bool = False,
+    limit: Optional[int] = None,
 ) -> None:
     """
     Run batch analysis with optional PR labeling support.
@@ -853,6 +854,7 @@ def run_batch_analysis_with_labels(
         github_token: GitHub token (required for labeling)
         timeout: Timeout for GitHub API calls
         force: If True, re-analyze PRs even if they already have a complexity label
+        limit: Maximum number of PRs to process (applied after filtering)
     """
     # When labeling (and not forcing), filter out PRs that already have complexity labels
     if label_prs and force:
@@ -898,6 +900,12 @@ def run_batch_analysis_with_labels(
 
     # Filter out PRs already in CSV
     remaining = [url for url in pr_urls if url not in completed_in_csv]
+
+    # Apply limit if specified (after filtering)
+    if limit is not None and limit > 0:
+        remaining = remaining[:limit]
+        typer.echo(f"Limiting to {len(remaining)} PRs (--limit {limit})", err=True)
+
     remaining_count = len(remaining)
 
     if remaining_count == 0:

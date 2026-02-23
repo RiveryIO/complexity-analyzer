@@ -307,6 +307,7 @@ complexity-cli batch-analyze --input-file prs.txt --output results.csv
 - `--label`, `-l`: Label PRs with complexity instead of CSV output
 - `--label-prefix`: Prefix for complexity labels (default: `complexity:`, used with `--label`)
 - `--force`, `-f`: Re-analyze PRs even if they already have a complexity label
+- `--limit`, `-n`: Maximum number of PRs to process (e.g. `--limit 10`)
 
 **Note:** When using `--workers` > 1, results are written to the CSV file as soon as each analyzer finishes, so the output order may differ from the input order. This does not affect resume capability - the tool still correctly skips already-analyzed PRs.
 

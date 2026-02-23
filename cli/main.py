@@ -577,6 +577,9 @@ def batch_analyze(
     anthropic_model: Optional[str] = typer.Option(
         None, "--anthropic-model", help="Anthropic model (e.g. claude-sonnet-4-5-20250929)"
     ),
+    limit: Optional[int] = typer.Option(
+        None, "--limit", "-n", help="Maximum number of PRs to process (e.g. --limit 10)"
+    ),
 ):
     """
     Batch analyze multiple PRs from a file or date range.
@@ -795,6 +798,7 @@ def batch_analyze(
             github_token=github_token,
             timeout=timeout,
             force=force,
+            limit=limit,
         )
 
     except KeyboardInterrupt:
