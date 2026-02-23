@@ -135,7 +135,7 @@ def generate_pr_list_from_date_range(
 
     # Fetch from GitHub
     typer.echo(
-        f"Fetching closed PRs for org '{org}' from {effective_since.date()} to {until.date()}...",
+        f"Fetching merged PRs for org '{org}' from {effective_since.date()} to {until.date()}...",
         err=True,
     )
     cache_file_handle = None
@@ -331,7 +331,7 @@ def generate_pr_list_from_repos_file(
 
     repos = load_repos_from_file(repos_file)
     typer.echo(
-        f"Fetching closed PRs for {len(repos)} repo(s) from {effective_since.date()} to {until.date()}...",
+        f"Fetching merged PRs for {len(repos)} repo(s) from {effective_since.date()} to {until.date()}...",
         err=True,
     )
 
@@ -367,7 +367,7 @@ def generate_pr_list_from_repos_file(
                 on_pr_found=write_pr_to_cache if cache_file else None,
                 progress_callback=progress_msg,
                 client=client,
-                merged_only=False,
+                merged_only=True,
             )
             typer.echo(f"Found {len(urls)} PRs", err=True)
             return urls

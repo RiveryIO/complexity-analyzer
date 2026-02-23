@@ -102,6 +102,7 @@ def test_generate_pr_list_from_repos_file(mock_search, tmp_path):
     mock_search.assert_called_once()
     call_kwargs = mock_search.call_args.kwargs
     assert call_kwargs["repos"] == ["owner/repo-a", "owner/repo-b"]
+    assert call_kwargs["merged_only"] is True
 
 
 @patch("cli.batch.search_closed_prs")
@@ -133,7 +134,7 @@ def test_generate_pr_list_from_github(mock_search, tmp_path):
     ]
 
     def mock_search_with_callback(
-        org, since, until, token, sleep_s, on_pr_found, progress_callback, client
+        org, since, until, token, sleep_s, on_pr_found, progress_callback, client, **kwargs
     ):
         """Mock that calls the on_pr_found callback for each URL."""
         for url in pr_urls:

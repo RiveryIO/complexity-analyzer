@@ -1380,6 +1380,7 @@ def search_closed_prs(
     max_retries: int = 5,
     progress_callback: Optional[Callable[[str], None]] = None,
     client: Optional[httpx.Client] = None,
+    merged_only: bool = True,
 ) -> List[str]:
     """
     Search for closed PRs in an organization within a date range.
@@ -1398,6 +1399,7 @@ def search_closed_prs(
         max_retries: Maximum number of retries for rate limit errors
         progress_callback: Optional callback for progress messages (e.g., rate limit warnings)
         client: Optional httpx.Client to reuse connections
+        merged_only: If True, search for merged PRs only (default: True)
 
     Returns:
         List of PR URLs (e.g., ["https://github.com/org/repo/pull/123", ...])
@@ -1412,7 +1414,10 @@ def search_closed_prs(
 
     since_str = since.strftime("%Y-%m-%d")
     until_str = until.strftime("%Y-%m-%d")
-    query = f"org:{org} is:pr is:closed closed:{since_str}..{until_str}"
+    if merged_only:
+        query = f"org:{org} is:pr is:merged merged:{since_str}..{until_str}"
+    else:
+        query = f"org:{org} is:pr is:closed closed:{since_str}..{until_str}"
 
     should_close_client = client is None
     if client is None:
