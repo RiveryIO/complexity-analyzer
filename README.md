@@ -105,7 +105,7 @@ complexity-cli analyze-pr "https://github.com/owner/repo/pull/123"
 
 - `OPENAI_API_KEY` (required for `--provider openai`): OpenAI API key
 - `ANTHROPIC_API_KEY` (required for `--provider anthropic`): Anthropic API key
-- `GH_TOKEN` or `GITHUB_TOKEN` (optional): GitHub API token for private repos or higher rate limits
+- `GH_TOKEN` or `GITHUB_TOKEN` (optional): GitHub API token for private repos or higher rate limits. If unset, falls back to `gh auth token` (GitHub CLI).
 
 ### Anthropic Provider
 
@@ -273,7 +273,7 @@ complexity-cli batch-analyze --input-file prs.txt --label --label-prefix "cx:"
 When using `--label`:
 - PRs that already have a complexity label are skipped (unless `--force` is used)
 - Labels are applied in the format `complexity:N` (customizable with `--label-prefix`)
-- No `--output` file is required
+- Results are written to `complexity-report.csv` by default (use `--output` to override)
 
 #### Resume Capability
 
@@ -294,7 +294,7 @@ complexity-cli batch-analyze --input-file prs.txt --output results.csv
 - `--org`: Organization name (for date range search)
 - `--since`: Start date in YYYY-MM-DD format (for date range search)
 - `--until`: End date in YYYY-MM-DD format (for date range search)
-- `--output`, `-o`: Output CSV file path (required)
+- `--output`, `-o`: Output CSV file path (required unless `--label`; with `--label` defaults to `complexity-report.csv`)
 - `--cache`: Cache file for PR list (used with date range to avoid re-fetching)
 - `--prompt-file`, `-p`: Path to custom prompt file
 - `--model`, `-m`: OpenAI model name (default: `gpt-5.2`)
@@ -348,14 +348,15 @@ Batch analysis outputs a CSV file with the following columns:
 - `pr_url`: The GitHub PR URL
 - `complexity`: The complexity score (1-10)
 - `explanation`: The explanation text
+- `author`: The PR author's GitHub username
 
 Example:
 
 ```csv
-pr_url,complexity,explanation
-https://github.com/owner/repo/pull/123,5,"Multiple modules/services with non-trivial control flow changes"
-https://github.com/owner/repo/pull/124,3,"Simple refactoring with minimal changes"
-https://github.com/owner/repo/pull/125,8,"Complex architectural changes across multiple services"
+pr_url,complexity,explanation,author
+https://github.com/owner/repo/pull/123,5,"Multiple modules/services with non-trivial control flow changes",jane-doe
+https://github.com/owner/repo/pull/124,3,"Simple refactoring with minimal changes",john-smith
+https://github.com/owner/repo/pull/125,8,"Complex architectural changes across multiple services",jane-doe
 ```
 
 ## Security

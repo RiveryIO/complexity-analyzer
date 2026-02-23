@@ -29,11 +29,11 @@ class CSVBatchWriter:
         Args:
             output_file: Path to the CSV output file
             batch_size: Number of rows to accumulate before flushing (default: 10)
-            fieldnames: CSV column names (default: ["pr_url", "complexity", "explanation"])
+            fieldnames: CSV column names (default: ["pr_url", "complexity", "explanation", "author"])
         """
         self._output_file = output_file
         self._batch_size = batch_size
-        self._fieldnames = fieldnames or ["pr_url", "complexity", "explanation"]
+        self._fieldnames = fieldnames or ["pr_url", "complexity", "explanation", "author"]
         self._buffer: List[Dict[str, str]] = []
         self._lock = threading.Lock()
         self._initialized = False
@@ -60,7 +60,13 @@ class CSVBatchWriter:
 
         self._initialized = True
 
-    def add_row(self, pr_url: str, complexity: int, explanation: str) -> None:
+    def add_row(
+        self,
+        pr_url: str,
+        complexity: int,
+        explanation: str,
+        author: str = "",
+    ) -> None:
         """
         Add a row to the buffer, flush if batch size reached.
 
@@ -68,6 +74,7 @@ class CSVBatchWriter:
             pr_url: PR URL
             complexity: Complexity score
             explanation: Explanation text
+            author: PR author GitHub username
         """
         with self._lock:
             self._ensure_initialized()
@@ -77,6 +84,7 @@ class CSVBatchWriter:
                     "pr_url": pr_url,
                     "complexity": str(complexity),
                     "explanation": explanation,
+                    "author": author or "",
                 }
             )
 

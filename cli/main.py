@@ -138,6 +138,7 @@ def analyze_pr_to_dict(
         )
 
     title = (meta.get("title") or "").strip()
+    author = (meta.get("user") or {}).get("login", "") or ""
 
     # Process diff
     truncated_diff, stats, selected_files = process_diff(
@@ -169,6 +170,7 @@ def analyze_pr_to_dict(
     output = {
         "score": result["complexity"],
         "explanation": result["explanation"],
+        "author": author,
         "provider": result.get("provider", provider),
         "model": result.get("model", llm_provider.model_name),
         "tokens": result.get("tokens"),
@@ -617,6 +619,10 @@ def batch_analyze(
             typer.echo("Error: --output is required unless --label is used", err=True)
             raise typer.Exit(1)
 
+        # When labeling, default to writing CSV as well (override with --output)
+        if label and not output_file:
+            output_file = Path("complexity-report.csv")
+
         # Get credentials
         openai_key = get_openai_api_key()
 
@@ -656,7 +662,7 @@ def batch_analyze(
         if label and not github_token:
             typer.echo("Error: GitHub token is required for labeling PRs", err=True)
             typer.echo(
-                "Set it with: export GH_TOKEN='your-token' or export GITHUB_TOKEN='your-token'",
+                "Set GH_TOKEN or GITHUB_TOKEN, or run `gh auth login` to use GitHub CLI token.",
                 err=True,
             )
             raise typer.Exit(1)

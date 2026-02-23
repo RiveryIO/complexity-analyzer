@@ -11,8 +11,25 @@ def get_github_token() -> Optional[str]:
     """Get GitHub token from environment.
 
     Checks GH_TOKEN first (GitHub CLI convention), then GITHUB_TOKEN.
+    Falls back to `gh auth token` if neither is set (uses GitHub CLI's token).
     """
-    return os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
+    token = os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
+    if token:
+        return token
+    # Fallback: use GitHub CLI token (has SSO auth for orgs)
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return None
 
 
 def get_github_tokens() -> List[str]:
@@ -42,7 +59,7 @@ def get_github_tokens() -> List[str]:
         if tokens:
             return tokens
 
-    # Fall back to single token
+    # Fall back to single token (includes gh auth token fallback)
     single_token = get_github_token()
     if single_token:
         return [single_token]

@@ -402,7 +402,13 @@ def load_completed_prs(output_file: Path) -> Set[str]:
     return completed
 
 
-def write_csv_row(output_file: Path, pr_url: str, complexity: int, explanation: str) -> None:
+def write_csv_row(
+    output_file: Path,
+    pr_url: str,
+    complexity: int,
+    explanation: str,
+    author: str = "",
+) -> None:
     """
     Write a single row to CSV output file atomically.
 
@@ -413,6 +419,7 @@ def write_csv_row(output_file: Path, pr_url: str, complexity: int, explanation: 
         pr_url: PR URL
         complexity: Complexity score
         explanation: Explanation text
+        author: PR author GitHub username
     """
     file_exists = output_file.exists()
 
@@ -477,17 +484,34 @@ def write_csv_row(output_file: Path, pr_url: str, complexity: int, explanation: 
                         )
                         mapped_row["explanation"] = explanation_val or ""
 
+                        author_val = (
+                            row.get("author")
+                            or row.get("Author")
+                            or row.get(list(row.keys())[3] if len(row.keys()) > 3 else "")
+                        )
+                        mapped_row["author"] = author_val or ""
+
                         existing_rows.append(mapped_row)
                 else:
                     # File doesn't have headers, use regular reader and map columns
                     reader = csv.reader(f)
                     for row in reader:
-                        if len(row) >= 3:
+                        if len(row) >= 4:
                             existing_rows.append(
                                 {
                                     "pr_url": row[0].strip(),
                                     "complexity": row[1].strip(),
                                     "explanation": row[2].strip(),
+                                    "author": row[3].strip(),
+                                }
+                            )
+                        elif len(row) >= 3:
+                            existing_rows.append(
+                                {
+                                    "pr_url": row[0].strip(),
+                                    "complexity": row[1].strip(),
+                                    "explanation": row[2].strip(),
+                                    "author": "",
                                 }
                             )
                         elif len(row) >= 2:
@@ -497,6 +521,7 @@ def write_csv_row(output_file: Path, pr_url: str, complexity: int, explanation: 
                                     "pr_url": row[0].strip(),
                                     "complexity": row[1].strip(),
                                     "explanation": "",
+                                    "author": "",
                                 }
                             )
                         elif len(row) >= 1:
@@ -506,6 +531,7 @@ def write_csv_row(output_file: Path, pr_url: str, complexity: int, explanation: 
                                     "pr_url": row[0].strip(),
                                     "complexity": "",
                                     "explanation": "",
+                                    "author": "",
                                 }
                             )
         except (csv.Error, IOError, KeyError) as e:
@@ -515,14 +541,16 @@ def write_csv_row(output_file: Path, pr_url: str, complexity: int, explanation: 
 
     # Write all rows (existing + new) to temp file
     with tmp_path.open("w", encoding="utf-8", newline="") as f:
-        fieldnames = ["pr_url", "complexity", "explanation"]
+        fieldnames = ["pr_url", "complexity", "explanation", "author"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
 
         # Always write header (even if file existed, we're standardizing the format)
         writer.writeheader()
 
-        # Write existing rows
+        # Write existing rows (ensure author key exists for backward compat)
         for row in existing_rows:
+            if "author" not in row:
+                row["author"] = ""
             writer.writerow(row)
 
         # Write new row
@@ -531,6 +559,7 @@ def write_csv_row(output_file: Path, pr_url: str, complexity: int, explanation: 
                 "pr_url": pr_url,
                 "complexity": complexity,
                 "explanation": explanation,
+                "author": author or "",
             }
         )
 
@@ -585,7 +614,7 @@ def run_batch_analysis(
 
     def process_single_pr(
         pr_url: str, idx: int
-    ) -> Tuple[str, Optional[int], Optional[str], Optional[Exception]]:
+    ) -> Tuple[str, Optional[int], Optional[str], Optional[str], Optional[Exception]]:
         """Process a single PR and return result or error."""
         try:
             if workers == 1:
@@ -595,13 +624,14 @@ def run_batch_analysis(
 
             result = analyze_fn(pr_url)
 
-            # Extract complexity and explanation
+            # Extract complexity, explanation, and author
             complexity = result.get("score", result.get("complexity", 0))
             explanation = result.get("explanation", "")
+            author = result.get("author", "") or ""
 
-            return pr_url, complexity, explanation, None
+            return pr_url, complexity, explanation, author, None
         except Exception as e:
-            return pr_url, None, None, e
+            return pr_url, None, None, None, e
 
     # Use thread-safe CSV writer for all cases
     csv_writer = CSVBatchWriter(output_file)
@@ -612,7 +642,7 @@ def run_batch_analysis(
             # Sequential processing (original behavior)
             for idx, pr_url in enumerate(remaining, 1):
                 try:
-                    pr_url_result, complexity, explanation, error = process_single_pr(pr_url, idx)
+                    pr_url_result, complexity, explanation, author, error = process_single_pr(pr_url, idx)
 
                     if error:
                         # Handle 404 errors (PR not found) with a clearer message
@@ -631,7 +661,7 @@ def run_batch_analysis(
                         continue
 
                     # Write to CSV using thread-safe writer
-                    csv_writer.add_row(pr_url_result, complexity, explanation)
+                    csv_writer.add_row(pr_url_result, complexity, explanation, author or "")
                     typer.echo(f"✓ Completed: complexity={complexity}", err=True)
 
                 except KeyboardInterrupt:
@@ -654,7 +684,7 @@ def run_batch_analysis(
                     for future in as_completed(future_to_pr):
                         pr_url, idx = future_to_pr[future]
                         try:
-                            pr_url_result, complexity, explanation, error = future.result()
+                            pr_url_result, complexity, explanation, author, error = future.result()
 
                             if error:
                                 # Handle 404 errors (PR not found) with a clearer message
@@ -675,7 +705,7 @@ def run_batch_analysis(
                                 continue
 
                             # Write to CSV using thread-safe writer
-                            csv_writer.add_row(pr_url_result, complexity, explanation)
+                            csv_writer.add_row(pr_url_result, complexity, explanation, author or "")
 
                             with completed_lock:
                                 completed_count[0] += 1
@@ -795,8 +825,8 @@ def run_batch_analysis_with_labels(
 
     def process_single_pr(
         pr_url: str, idx: int
-    ) -> Tuple[str, Optional[int], Optional[str], Optional[str], Optional[Exception]]:
-        """Process a single PR: analyze and optionally label. Returns (url, complexity, explanation, label_applied, error)."""
+    ) -> Tuple[str, Optional[int], Optional[str], Optional[str], Optional[str], Optional[Exception]]:
+        """Process a single PR: analyze and optionally label. Returns (url, complexity, explanation, author, label_applied, error)."""
         try:
             if workers == 1:
                 typer.echo(f"\n[{idx}/{remaining_count}] Analyzing {pr_url}...", err=True)
@@ -805,9 +835,10 @@ def run_batch_analysis_with_labels(
 
             result = analyze_fn(pr_url)
 
-            # Extract complexity and explanation
+            # Extract complexity, explanation, and author
             complexity = result.get("score", result.get("complexity", 0))
             explanation = result.get("explanation", "")
+            author = result.get("author", "") or ""
 
             label_applied = None
 
@@ -823,9 +854,9 @@ def run_batch_analysis_with_labels(
                         f"  Warning: Failed to apply label to {pr_url}: {label_error}", err=True
                     )
 
-            return pr_url, complexity, explanation, label_applied, None
+            return pr_url, complexity, explanation, author, label_applied, None
         except Exception as e:
-            return pr_url, None, None, None, e
+            return pr_url, None, None, None, None, e
 
     # Use thread-safe CSV writer if output_file is provided
     csv_writer = CSVBatchWriter(output_file) if output_file else None
@@ -836,7 +867,7 @@ def run_batch_analysis_with_labels(
             # Sequential processing
             for idx, pr_url in enumerate(remaining, 1):
                 try:
-                    pr_url_result, complexity, explanation, label_applied, error = (
+                    pr_url_result, complexity, explanation, author, label_applied, error = (
                         process_single_pr(pr_url, idx)
                     )
 
@@ -853,7 +884,7 @@ def run_batch_analysis_with_labels(
 
                     # Write to CSV using thread-safe writer
                     if csv_writer:
-                        csv_writer.add_row(pr_url_result, complexity, explanation)
+                        csv_writer.add_row(pr_url_result, complexity, explanation, author or "")
 
                     if label_applied:
                         typer.echo(
@@ -884,6 +915,7 @@ def run_batch_analysis_with_labels(
                                 pr_url_result,
                                 complexity,
                                 explanation,
+                                author,
                                 label_applied,
                                 error,
                             ) = future.result()
@@ -902,7 +934,7 @@ def run_batch_analysis_with_labels(
 
                             # Write to CSV using thread-safe writer
                             if csv_writer:
-                                csv_writer.add_row(pr_url_result, complexity, explanation)
+                                csv_writer.add_row(pr_url_result, complexity, explanation, author or "")
 
                             with completed_lock:
                                 completed_count[0] += 1
