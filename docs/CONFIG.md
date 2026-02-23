@@ -11,11 +11,24 @@
 
 ## Team Mapping
 
-**File**: `teams.yaml` or `teams.json` in project root
+**File**: `teams.yaml`, `teams.yml`, or `teams.txt` in project root
+
+Maps GitHub usernames to teams for per-team reports and company-wide aggregation.
+
+**Text format** (recommended):
+
+```
+[Platform] alice bob charlie
+[Backend] dave eve
+[Frontend] frank grace
+```
+
+**YAML format**:
 
 ```yaml
-owner/repo: "Team Name"
-other-org/other-repo: "Platform"
+Platform: [alice, bob, charlie]
+Backend: [dave, eve]
+Frontend: [frank, grace]
 ```
 
 ## Verification

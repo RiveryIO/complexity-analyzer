@@ -23,7 +23,7 @@ from .github import (
 )
 from .csv_handler import CSVBatchWriter, CSV_FIELDNAMES
 from .io_safety import normalize_path, read_text_file
-from .team_config import get_team_for_repo
+from .team_config import get_team_for_developer
 from .utils import parse_pr_url
 
 # Get logger
@@ -769,8 +769,7 @@ def run_batch_analysis(
         """Extract fields from result and write to CSV."""
         complexity = result.get("score", result.get("complexity", 0))
         author = result.get("author", "") or ""
-        owner, repo = parse_pr_url(pr_url_result)[:2]
-        team = get_team_for_repo(owner, repo)
+        team = get_team_for_developer(author)
         merged_at = result.get("merged_at") or ""
         created_at = result.get("created_at") or ""
         date = merged_at[:10] if merged_at else ""
@@ -1047,8 +1046,7 @@ def run_batch_analysis_with_labels(
 
                     complexity = result.get("score", result.get("complexity", 0))
                     author = result.get("author", "") or ""
-                    owner, repo = parse_pr_url(pr_url_result)[:2]
-                    team = get_team_for_repo(owner, repo)
+                    team = get_team_for_developer(author)
                     merged_at = result.get("merged_at") or ""
                     created_at = result.get("created_at") or ""
                     date = merged_at[:10] if merged_at else ""
@@ -1112,8 +1110,7 @@ def run_batch_analysis_with_labels(
 
                             complexity = result.get("score", result.get("complexity", 0))
                             author = result.get("author", "") or ""
-                            owner, repo = parse_pr_url(pr_url_result)[:2]
-                            team = get_team_for_repo(owner, repo)
+                            team = get_team_for_developer(author)
                             merged_at = result.get("merged_at") or ""
                             created_at = result.get("created_at") or ""
                             date = merged_at[:10] if merged_at else ""

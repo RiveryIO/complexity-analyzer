@@ -53,6 +53,7 @@ Thumbs.db
 *.png
 results/
 
-# Reports output (generated charts, migration logs)
-reports/
+# Reports output (generated charts, migration logs) - keep reports/*.py tracked
+reports/*.png
+reports/*.log
 

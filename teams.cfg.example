@@ -1,0 +1,15 @@
+# Team mapping: [TeamName] followed by developers (same line or one per line)
+# Copy to teams.cfg or teams.yaml and fill in your values.
+# Enables per-team reports as well as company-wide aggregation.
+#
+# Example:
+# [Platform]
+# alice
+# bob
+# charlie
+# [Backend]
+# dave
+# eve
+# [Frontend]
+# frank
+# grace

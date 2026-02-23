@@ -13,7 +13,7 @@ from .constants import DEFAULT_SLEEP_SECONDS, DEFAULT_TIMEOUT
 from .csv_handler import CSV_FIELDNAMES
 from .github import GitHubAPIError, fetch_pr_metadata, wait_for_rate_limit
 from .io_safety import normalize_path
-from .team_config import get_team_for_repo
+from .team_config import get_team_for_developer
 from .utils import parse_pr_url
 
 logger = logging.getLogger("complexity-cli")
@@ -148,9 +148,10 @@ def run_migration(
         row["lines_added"] = str(additions) if additions is not None else ""
         row["lines_deleted"] = str(deletions) if deletions is not None else ""
 
-        # Team from config
-        if not row.get("team"):
-            row["team"] = get_team_for_repo(owner, repo)
+        # Team from config (developer-based mapping)
+        developer = row.get("developer") or row.get("author") or ""
+        if not row.get("team") and developer:
+            row["team"] = get_team_for_developer(developer)
 
         enriched += 1
         if (i + 1) % 10 == 0:
