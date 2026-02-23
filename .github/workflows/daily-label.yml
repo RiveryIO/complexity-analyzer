@@ -1,3 +1,16 @@
+# Daily PR Complexity Labeling
+#
+# This workflow analyzes closed PRs in a GitHub organization and applies
+# complexity labels (e.g. complexity:5) to them. It runs:
+# - On schedule: daily at 1am UTC, labeling PRs closed the previous day
+# - On demand: via workflow_dispatch with optional date range and provider
+#
+# Flow: Fetch closed PRs for org + date range → Run LLM analysis on each diff →
+#       Parse 1–10 score → Apply/update complexity:N label on GitHub
+#
+# Required secrets: ORG_GITHUB_TOKEN, OPENAI_API_KEY (or ANTHROPIC_API_KEY for anthropic)
+# Optional vars: COMPLEXITY_ORG (default org), COMPLEXITY_PROVIDER (openai|anthropic|bedrock)
+
 name: Daily PR Complexity Labeling
 
 on:
@@ -24,6 +37,11 @@ on:
         required: false
         type: boolean
         default: false
+      provider:
+        description: 'LLM provider: openai, anthropic, or bedrock'
+        required: false
+        type: string
+        default: 'anthropic'
 
 jobs:
   label-prs:
@@ -70,6 +88,7 @@ jobs:
           # Requires a PAT with repo scope and SSO authorization for the target org
           GITHUB_TOKEN: ${{ secrets.ORG_GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           # Determine org: input takes precedence over repository variable
           ORG="${{ inputs.org }}"
@@ -88,12 +107,22 @@ jobs:
             FORCE_FLAG="--force"
           fi
 
+          # Provider: input (manual run) > COMPLEXITY_PROVIDER var > anthropic
+          PROVIDER="${{ inputs.provider }}"
+          if [ -z "$PROVIDER" ]; then
+            PROVIDER="${{ vars.COMPLEXITY_PROVIDER }}"
+          fi
+          if [ -z "$PROVIDER" ]; then
+            PROVIDER="anthropic"
+          fi
+
           complexity-cli batch-analyze \
             --org "$ORG" \
             --since "${{ steps.dates.outputs.since }}" \
             --until "${{ steps.dates.outputs.until }}" \
             --label \
             --workers 5 \
+            --provider "$PROVIDER" \
             $FORCE_FLAG
 
       - name: Summary
@@ -103,8 +132,16 @@ jobs:
           if [ -z "$ORG" ]; then
             ORG="${{ vars.COMPLEXITY_ORG }}"
           fi
+          PROVIDER="${{ inputs.provider }}"
+          if [ -z "$PROVIDER" ]; then
+            PROVIDER="${{ vars.COMPLEXITY_PROVIDER }}"
+          fi
+          if [ -z "$PROVIDER" ]; then
+            PROVIDER="anthropic"
+          fi
           echo "## PR Complexity Labeling Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Date range:** ${{ steps.dates.outputs.since }} to ${{ steps.dates.outputs.until }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Organization:** $ORG" >> $GITHUB_STEP_SUMMARY
+          echo "- **Provider:** $PROVIDER" >> $GITHUB_STEP_SUMMARY
 

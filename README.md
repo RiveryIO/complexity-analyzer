@@ -361,7 +361,12 @@ You can trigger the workflow manually from the GitHub Actions tab with the follo
 
 **Required Secrets:**
 - `ORG_GITHUB_TOKEN`: GitHub PAT with repo access across the organization
-- `OPENAI_API_KEY`: OpenAI API key for LLM analysis
+- `OPENAI_API_KEY`: OpenAI API key (when using `--provider openai`, default)
+- `ANTHROPIC_API_KEY`: Anthropic API key (when using `--provider anthropic`)
+
+**Optional Variables:**
+- `COMPLEXITY_ORG`: Default organization (or pass via manual trigger input)
+- `COMPLEXITY_PROVIDER`: Default LLM provider (`openai`, `anthropic`, or `bedrock`)
 
 ### Single PR Analysis in CI
 
