@@ -5,6 +5,7 @@ import pytest
 from pathlib import Path
 
 from reports.runner import load_dataframe, run_reports
+from reports.validation import MIN_PNG_SIZE_BYTES
 
 
 # Path to sample CSV fixture
@@ -45,8 +46,12 @@ def test_run_reports_generates_files(tmp_path):
 
     assert len(generated) >= 10
     for path in generated:
-        assert Path(path).exists()
-        assert Path(path).suffix == ".png"
+        p = Path(path)
+        assert p.exists()
+        assert p.suffix == ".png"
+        assert p.stat().st_size >= MIN_PNG_SIZE_BYTES, (
+            f"Report {path} is too small ({p.stat().st_size} bytes), likely empty"
+        )
 
 
 @pytest.mark.skipif(not SAMPLE_CSV.exists(), reason="Sample CSV fixture not found")
@@ -99,3 +104,24 @@ def test_run_reports_empty_csv(tmp_path):
     generated = run_reports(csv_path=csv_file, output_dir=output_dir)
 
     assert generated == []
+    assert list(output_dir.glob("*.png")) == [], "No PNGs should be created for empty CSV"
+
+
+def test_run_reports_no_empty_pngs_left_behind(tmp_path):
+    """Reports with insufficient data must not leave empty PNG files on disk."""
+    # Minimal CSV: 1 row, no team, no developer - many reports will skip
+    csv_file = tmp_path / "minimal.csv"
+    csv_file.write_text(
+        "pr_url,complexity,developer,date,team,merged_at,created_at,lines_added,lines_deleted,explanation\n"
+        "https://github.com/org/repo/pull/1,5,,2024-01-15,,2024-01-15T10:00:00Z,2024-01-10T09:00:00Z,100,50,Test\n"
+    )
+
+    output_dir = tmp_path / "reports"
+    generated = run_reports(csv_path=csv_file, output_dir=output_dir)
+
+    # Any generated PNG must have meaningful content
+    for path in generated:
+        p = Path(path)
+        assert p.stat().st_size >= MIN_PNG_SIZE_BYTES, (
+            f"Report {path} is too small ({p.stat().st_size} bytes)"
+        )

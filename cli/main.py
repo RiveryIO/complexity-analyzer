@@ -23,6 +23,7 @@ from .batch import (  # noqa: E402
     load_pr_urls_from_file,
 )
 from .config import (  # noqa: E402
+    detect_provider_from_env,
     get_anthropic_api_key,
     get_github_token,
     get_github_tokens,
@@ -463,8 +464,8 @@ def analyze_pr(
     openai_api_key: Optional[str] = typer.Option(None, "--openai-api-key", help="OpenAI API key"),
     github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
-    provider: str = typer.Option(
-        "openai", "--provider", help="LLM provider: openai, anthropic, or bedrock"
+    provider: Optional[str] = typer.Option(
+        None, "--provider", help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)"
     ),
     bedrock_model: Optional[str] = typer.Option(
         None, "--bedrock-model", help="Bedrock model ID (e.g. anthropic.claude-sonnet-4-5-20250929-v1:0)"
@@ -477,6 +478,7 @@ def analyze_pr(
     ),
 ):
     """Analyze a GitHub PR and compute complexity score."""
+    provider = provider or detect_provider_from_env()
     final_pr_url = pr_url
     if not final_pr_url:
         typer.echo(
@@ -576,8 +578,8 @@ def batch_analyze(
         help="Comma-separated list of GitHub tokens for rotation on rate limits. "
         "Can also be set via GH_TOKENS or GITHUB_TOKENS environment variables.",
     ),
-    provider: str = typer.Option(
-        "openai", "--provider", help="LLM provider: openai, anthropic, or bedrock"
+    provider: Optional[str] = typer.Option(
+        None, "--provider", help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)"
     ),
     bedrock_model: Optional[str] = typer.Option(
         None, "--bedrock-model", help="Bedrock model ID"
@@ -616,12 +618,16 @@ def batch_analyze(
     Use --workers to enable parallel processing (e.g., --workers 5 for 5 parallel workers).
     Note: Parallel processing may hit rate limits faster; adjust --sleep-seconds if needed.
 
+    Provider auto-detection: When --provider is not set, the provider is inferred from .env keys
+    (ANTHROPIC_API_KEY → anthropic, OPENAI_API_KEY → openai, AWS_PROFILE/AWS_REGION → bedrock).
+
     Token Rotation Mode:
     When multiple GitHub tokens are provided (via --github-tokens or GH_TOKENS env var),
     the tool automatically rotates between tokens when rate limits are hit. This allows
     for higher throughput when processing large batches of PRs.
     """
     try:
+        provider = provider or detect_provider_from_env()
         # Validate inputs
         if input_file and (org or repos_file or all_repos or since or until):
             typer.echo("Error: Cannot specify both --input-file and date range options", err=True)
@@ -756,6 +762,7 @@ def batch_analyze(
                     sleep_seconds=sleep_seconds,
                     merged_only=True,
                     since_override=since_override,
+                    max_results=limit,
                 )
             elif repos_file:
                 pr_urls = generate_pr_list_from_repos_file(
@@ -1222,8 +1229,8 @@ def label_pr(
     dry_run: bool = typer.Option(False, "--dry-run", help="Analyze but don't update label"),
     openai_api_key: Optional[str] = typer.Option(None, "--openai-api-key", help="OpenAI API key"),
     github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
-    provider: str = typer.Option(
-        "openai", "--provider", help="LLM provider: openai, anthropic, or bedrock"
+    provider: Optional[str] = typer.Option(
+        None, "--provider", help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)"
     ),
     bedrock_model: Optional[str] = typer.Option(
         None, "--bedrock-model", help="Bedrock model ID"
@@ -1260,6 +1267,7 @@ def label_pr(
                 raise typer.Exit(1)
             typer.echo(f"Inferred PR URL: {final_pr_url}", err=True)
 
+        provider = provider or detect_provider_from_env()
         # Parse PR URL
         owner, repo, pr = parse_pr_url(final_pr_url)
         validate_owner_repo(owner, repo)

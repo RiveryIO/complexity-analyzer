@@ -1060,17 +1060,21 @@ def list_user_repos(
     affiliation: str = "owner,collaborator,organization_member",
     timeout: float = DEFAULT_TIMEOUT,
     progress_callback: Optional[Callable[[str], None]] = None,
+    pushed_since: Optional[datetime] = None,
 ) -> List[str]:
     """
     List all repositories the authenticated user has access to.
 
     Uses GET /user/repos with pagination. Requires a GitHub token.
+    Repos are sorted by updated (most recent first).
 
     Args:
         token: GitHub token (required)
-        affiliation: Comma-separated list of affiliations (default: owner,collaborator,organization_member)
+        affiliation: Comma-separated list of affiliations
         timeout: Request timeout in seconds
         progress_callback: Optional callback for progress messages
+        pushed_since: If set, only return repos with pushed_at >= this date.
+            Skips inactive repos that cannot have merged PRs in the date range.
 
     Returns:
         List of "owner/repo" strings
@@ -1111,6 +1115,22 @@ def list_user_repos(
                     break
 
                 for repo in repos:
+                    if pushed_since:
+                        pushed_at = repo.get("pushed_at")
+                        if not pushed_at:
+                            continue
+                        try:
+                            # Parse ISO format
+                            if pushed_at.endswith("Z"):
+                                pushed_at = pushed_at[:-1] + "+00:00"
+                            dt = datetime.fromisoformat(
+                                pushed_at.replace("Z", "+00:00")
+                            )
+                            if dt < pushed_since:
+                                continue
+                        except (ValueError, TypeError):
+                            continue
+
                     owner = (repo.get("owner") or {}).get("login", "")
                     name = repo.get("name", "")
                     if owner and name:
@@ -1408,6 +1428,12 @@ def search_closed_prs(
             client.close()
 
 
+# Max query length for GitHub search (leave room for is:pr is:merged merged:...)
+_SEARCH_QUERY_BASE_LEN = 60
+_SEARCH_REPO_LEN_ESTIMATE = 28  # repo:owner/name ~25-30 chars
+_SEARCH_MAX_REPOS_PER_QUERY = (256 - _SEARCH_QUERY_BASE_LEN) // _SEARCH_REPO_LEN_ESTIMATE
+
+
 def search_closed_prs_by_repos(
     repos: List[str],
     since: datetime,
@@ -1420,12 +1446,14 @@ def search_closed_prs_by_repos(
     progress_callback: Optional[Callable[[str], None]] = None,
     client: Optional[httpx.Client] = None,
     merged_only: bool = False,
+    max_results: Optional[int] = None,
+    batch_size: int = _SEARCH_MAX_REPOS_PER_QUERY,
 ) -> List[str]:
     """
     Search for closed PRs in a list of repositories within a date range.
 
-    Uses GitHub Search API to find PRs closed/merged between since and until dates.
-    Searches each repo separately and merges results.
+    Uses GitHub Search API. Batches multiple repos per query when possible to
+    reduce API calls. Stops early when max_results is reached.
 
     Args:
         repos: List of "owner/repo" strings
@@ -1438,7 +1466,9 @@ def search_closed_prs_by_repos(
         max_retries: Maximum number of retries for rate limit errors
         progress_callback: Optional callback for progress messages
         client: Optional httpx.Client to reuse connections
-        merged_only: If True, search for merged PRs only (uses is:merged, merged: date range)
+        merged_only: If True, search for merged PRs only
+        max_results: If set, stop searching once this many PRs are found
+        batch_size: Max repos per search query (default ~7, GitHub query ~256 chars)
 
     Returns:
         List of PR URLs (deduplicated)
@@ -1450,7 +1480,7 @@ def search_closed_prs_by_repos(
 
     for repo in repo_list:
         if not REPO_PATTERN.match(repo):
-            raise ValueError(f"Invalid repo format: {repo!r}. Use owner/repo (e.g. RiveryIO/complexity-analyzer)")
+            raise ValueError(f"Invalid repo format: {repo!r}. Use owner/repo")
 
     since_str = since.strftime("%Y-%m-%d")
     until_str = until.strftime("%Y-%m-%d")
@@ -1462,30 +1492,67 @@ def search_closed_prs_by_repos(
     seen: Set[str] = set()
     all_urls: List[str] = []
 
+    # Build batches of repos that fit in query
+    batches: List[List[str]] = []
+    for i in range(0, len(repo_list), batch_size):
+        batch = repo_list[i : i + batch_size]
+        batches.append(batch)
+
     try:
-        for i, repo in enumerate(repo_list):
+        for batch in batches:
+            if max_results is not None and len(all_urls) >= max_results:
+                break
+
+            repo_quals = " ".join(f"repo:{r}" for r in batch)
             if merged_only:
-                query = f"repo:{repo} is:pr is:merged merged:{since_str}..{until_str}"
+                query = f"{repo_quals} is:pr is:merged merged:{since_str}..{until_str}"
             else:
-                query = f"repo:{repo} is:pr is:closed closed:{since_str}..{until_str}"
-            if progress_callback:
-                progress_callback(f"Searching {repo}...")
-            urls = _search_prs_with_query(
-                query=query,
-                token=token,
-                sleep_s=sleep_s,
-                timeout=timeout,
-                on_pr_found=on_pr_found,
-                max_retries=max_retries,
-                progress_callback=progress_callback,
-                client=client,
-            )
-            for url in urls:
-                if url not in seen:
-                    seen.add(url)
-                    all_urls.append(url)
-            if i < len(repo_list) - 1:
-                time.sleep(sleep_s)
+                query = f"{repo_quals} is:pr is:closed closed:{since_str}..{until_str}"
+
+            if len(query) > 256:
+                # Fallback: search repos one by one
+                for repo in batch:
+                    if max_results is not None and len(all_urls) >= max_results:
+                        break
+                    if merged_only:
+                        q = f"repo:{repo} is:pr is:merged merged:{since_str}..{until_str}"
+                    else:
+                        q = f"repo:{repo} is:pr is:closed closed:{since_str}..{until_str}"
+                    if progress_callback:
+                        progress_callback(f"Searching {repo}...")
+                    urls = _search_prs_with_query(
+                        query=q,
+                        token=token,
+                        sleep_s=sleep_s,
+                        timeout=timeout,
+                        on_pr_found=on_pr_found,
+                        max_retries=max_retries,
+                        progress_callback=progress_callback,
+                        client=client,
+                    )
+                    for url in urls:
+                        if url not in seen:
+                            seen.add(url)
+                            all_urls.append(url)
+                    time.sleep(sleep_s)
+            else:
+                if progress_callback:
+                    progress_callback(f"Searching {len(batch)} repos...")
+                urls = _search_prs_with_query(
+                    query=query,
+                    token=token,
+                    sleep_s=sleep_s,
+                    timeout=timeout,
+                    on_pr_found=on_pr_found,
+                    max_retries=max_retries,
+                    progress_callback=progress_callback,
+                    client=client,
+                )
+                for url in urls:
+                    if url not in seen:
+                        seen.add(url)
+                        all_urls.append(url)
+            time.sleep(sleep_s)  # Rate limit: sleep between batches
         return all_urls
     finally:
         if should_close_client:

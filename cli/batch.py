@@ -395,6 +395,7 @@ def generate_pr_list_from_all_repos(
     sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
     merged_only: bool = True,
     since_override: Optional[datetime] = None,
+    max_results: Optional[int] = None,
 ) -> List[str]:
     """
     Generate PR list from all repos the authenticated user has access to.
@@ -426,6 +427,7 @@ def generate_pr_list_from_all_repos(
     repos = list_user_repos(
         token=github_token,
         progress_callback=lambda msg: typer.echo(msg, err=True),
+        pushed_since=effective_since,
     )
     effective_since = since_override if since_override is not None else since
     if effective_since != since:
@@ -434,7 +436,12 @@ def generate_pr_list_from_all_repos(
             err=True,
         )
 
-    typer.echo(f"Found {len(repos)} repos. Searching for {'merged' if merged_only else 'closed'} PRs from {effective_since.date()} to {until.date()}...", err=True)
+    typer.echo(
+        f"Found {len(repos)} active repos (filtered by pushed_since). "
+        f"Searching for {'merged' if merged_only else 'closed'} PRs from "
+        f"{effective_since.date()} to {until.date()}...",
+        err=True,
+    )
 
     cache_file_handle = None
     try:
@@ -469,6 +476,7 @@ def generate_pr_list_from_all_repos(
                 progress_callback=progress_msg,
                 client=client,
                 merged_only=merged_only,
+                max_results=max_results,
             )
             typer.echo(f"Found {len(urls)} PRs", err=True)
             return urls

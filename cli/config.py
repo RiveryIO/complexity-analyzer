@@ -77,6 +77,35 @@ def get_anthropic_api_key() -> Optional[str]:
     return os.getenv("ANTHROPIC_API_KEY")
 
 
+def detect_provider_from_env() -> str:
+    """
+    Auto-detect LLM provider from environment keys (e.g. from .env).
+
+    Priority when multiple keys exist:
+    1. COMPLEXITY_PROVIDER (explicit override)
+    2. ANTHROPIC_API_KEY (set and non-empty)
+    3. OPENAI_API_KEY (set and non-empty)
+    4. AWS_PROFILE or AWS_REGION (Bedrock)
+    5. openai (default fallback)
+    """
+    explicit = os.getenv("COMPLEXITY_PROVIDER", "").strip().lower()
+    if explicit in ("openai", "anthropic", "bedrock"):
+        return explicit
+
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if anthropic_key:
+        return "anthropic"
+
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if openai_key:
+        return "openai"
+
+    if os.getenv("AWS_PROFILE") or os.getenv("AWS_REGION"):
+        return "bedrock"
+
+    return "openai"
+
+
 def get_bedrock_config() -> tuple[str, str]:
     """
     Get Bedrock region and model ID from environment.

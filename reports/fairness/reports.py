@@ -6,6 +6,8 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from reports.validation import has_plottable_agg, has_plottable_scatter, validate_png_has_content
+
 
 def report_pr_size_vs_complexity(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
     """Report 10: PR Size vs Complexity Correlation - scatter."""
@@ -13,6 +15,8 @@ def report_pr_size_vs_complexity(df: pd.DataFrame, output_dir: Path) -> Optional
     df["lines_changed"] = df.get("lines_added", 0).fillna(0) + df.get("lines_deleted", 0).fillna(0)
     df = df[df["lines_changed"] > 0]
     if df.empty:
+        return None
+    if not has_plottable_scatter(df["lines_changed"], df["complexity"], min_points=1):
         return None
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.scatter(df["lines_changed"], df["complexity"], alpha=0.5)
@@ -23,7 +27,7 @@ def report_pr_size_vs_complexity(df: pd.DataFrame, output_dir: Path) -> Optional
     out = output_dir / "10-pr-size-vs-complexity.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
-    return str(out)
+    return str(out) if validate_png_has_content(out) else None
 
 
 def report_pr_count_vs_avg_complexity(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
@@ -34,6 +38,8 @@ def report_pr_count_vs_avg_complexity(df: pd.DataFrame, output_dir: Path) -> Opt
     if df.empty:
         return None
     agg = df.groupby("developer").agg(pr_count=("pr_url", "count"), avg_complexity=("complexity", "mean"))
+    if not has_plottable_agg(agg):
+        return None
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.scatter(agg["pr_count"], agg["avg_complexity"], alpha=0.7)
     for idx, row in agg.iterrows():
@@ -45,4 +51,4 @@ def report_pr_count_vs_avg_complexity(df: pd.DataFrame, output_dir: Path) -> Opt
     out = output_dir / "11-pr-count-vs-avg-complexity.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
-    return str(out)
+    return str(out) if validate_png_has_content(out) else None

@@ -7,6 +7,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from reports.validation import (
+    has_plottable_agg,
+    has_plottable_scatter,
+    has_plottable_series,
+    validate_png_has_content,
+)
+
 
 def _ensure_date(df: pd.DataFrame) -> pd.DataFrame:
     if "date" not in df.columns and "merged_at" in df.columns:
@@ -33,6 +40,8 @@ def report_complexity_distribution_by_team(df: pd.DataFrame, output_dir: Path) -
     df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
     if df["team"].nunique() == 0:
         return None
+    if not has_plottable_series(df["complexity"]):
+        return None
     fig, ax = plt.subplots(figsize=(10, 6))
     df.boxplot(column="complexity", by="team", ax=ax)
     ax.set_title("Complexity Distribution by Team")
@@ -43,7 +52,7 @@ def report_complexity_distribution_by_team(df: pd.DataFrame, output_dir: Path) -
     out = output_dir / "04-complexity-distribution-by-team.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
-    return str(out)
+    return str(out) if validate_png_has_content(out) else None
 
 
 def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
@@ -62,6 +71,8 @@ def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optiona
         index="sprint", columns="developer", values="complexity", aggfunc="sum", fill_value=0
     )
     pivot = pivot.reindex(pivot.sum().sort_values(ascending=False).index, axis=1)
+    if not has_plottable_agg(pivot):
+        return None
     fig, ax = plt.subplots(figsize=(12, 6))
     pivot.plot(kind="bar", stacked=True, ax=ax, width=0.8)
     ax.set_title("Developer Complexity Contribution (per Sprint)")
@@ -73,7 +84,7 @@ def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optiona
     out = output_dir / "05-developer-contribution.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
-    return str(out)
+    return str(out) if validate_png_has_content(out) else None
 
 
 def report_complexity_per_dev_vs_pr_count(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
@@ -85,6 +96,8 @@ def report_complexity_per_dev_vs_pr_count(df: pd.DataFrame, output_dir: Path) ->
     if df.empty:
         return None
     agg = df.groupby("developer").agg(pr_count=("pr_url", "count"), total_complexity=("complexity", "sum"))
+    if not has_plottable_agg(agg):
+        return None
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.scatter(agg["pr_count"], agg["total_complexity"], alpha=0.7)
     for idx, row in agg.iterrows():
@@ -96,7 +109,7 @@ def report_complexity_per_dev_vs_pr_count(df: pd.DataFrame, output_dir: Path) ->
     out = output_dir / "06-complexity-per-dev-vs-pr-count.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
-    return str(out)
+    return str(out) if validate_png_has_content(out) else None
 
 
 def report_complexity_vs_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
@@ -109,6 +122,8 @@ def report_complexity_vs_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optio
     df = df[df["cycle_hours"] >= 0]
     if df.empty:
         return None
+    if not has_plottable_scatter(df["complexity"], df["cycle_hours"], min_points=1):
+        return None
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.scatter(df["complexity"], df["cycle_hours"], alpha=0.6)
     ax.set_title("Complexity vs Cycle Time (hours)")
@@ -118,7 +133,7 @@ def report_complexity_vs_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optio
     out = output_dir / "14-complexity-vs-cycle-time.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
-    return str(out)
+    return str(out) if validate_png_has_content(out) else None
 
 
 def report_complexity_per_team_per_dev(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
@@ -131,6 +146,8 @@ def report_complexity_per_team_per_dev(df: pd.DataFrame, output_dir: Path) -> Op
     team_count = df[df["_dev"] != ""].groupby("team")["_dev"].nunique().reindex(team_total.index, fill_value=1)
     team_count = team_count.replace(0, 1)
     normalized = (team_total / team_count.fillna(1)).sort_values(ascending=False)
+    if not has_plottable_series(normalized):
+        return None
     fig, ax = plt.subplots(figsize=(10, 6))
     normalized.plot(kind="bar", ax=ax, color="steelblue")
     ax.set_title("Complexity per Team per Developer (Normalized)")
@@ -141,7 +158,7 @@ def report_complexity_per_team_per_dev(df: pd.DataFrame, output_dir: Path) -> Op
     out = output_dir / "17-complexity-per-team-per-dev.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
-    return str(out)
+    return str(out) if validate_png_has_content(out) else None
 
 
 def report_team_gini(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
@@ -149,6 +166,8 @@ def report_team_gini(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
     df = df.copy()
     df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
     ginis = df.groupby("team")["complexity"].apply(_gini).sort_values(ascending=False)
+    if not has_plottable_series(ginis):
+        return None
     fig, ax = plt.subplots(figsize=(10, 6))
     ginis.plot(kind="bar", ax=ax, color="purple", alpha=0.8)
     ax.set_title("Team Complexity Gini Coefficient (Concentration)")
@@ -159,4 +178,4 @@ def report_team_gini(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
     out = output_dir / "12-team-gini.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
-    return str(out)
+    return str(out) if validate_png_has_content(out) else None
