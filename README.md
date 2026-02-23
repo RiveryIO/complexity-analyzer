@@ -2,6 +2,10 @@
 
 A command-line tool that uses LLMs to analyze the complexity of GitHub pull requests. It helps engineering teams measure velocity in a way that actually reflects the work being done—not just lines of code changed.
 
+## Documentation
+
+- **[How Complexity Analysis Works](docs/COMPLEXITY_ANALYSIS.md)** — End-to-end flow, scoring factors, and fine-tuning for your organization
+
 ## Why Measure Complexity?
 
 Traditional engineering metrics like lines of code, number of commits, or PR count don't capture what really matters: **how hard was the work?**
