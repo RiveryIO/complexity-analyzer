@@ -9,6 +9,7 @@ from cli.batch import (
     load_repos_from_file,
     generate_pr_list_from_date_range,
     generate_pr_list_from_repos_file,
+    get_max_merged_at_from_csv,
     load_completed_prs,
     write_csv_row,
     run_batch_analysis,
@@ -181,11 +182,39 @@ def test_load_completed_prs_not_exists(tmp_path):
     assert len(completed) == 0
 
 
+def test_get_max_merged_at_from_csv_none(tmp_path):
+    """Test get_max_merged_at_from_csv when file does not exist."""
+    assert get_max_merged_at_from_csv(tmp_path / "nonexistent.csv") is None
+    assert get_max_merged_at_from_csv(None) is None
+
+
+def test_get_max_merged_at_from_csv_no_column(tmp_path):
+    """Test get_max_merged_at_from_csv when merged_at column missing."""
+    csv_file = tmp_path / "legacy.csv"
+    csv_file.write_text("pr_url,complexity,explanation,author\nhttps://github.com/org/repo/pull/1,5,Test,alice\n")
+    assert get_max_merged_at_from_csv(csv_file) is None
+
+
+def test_get_max_merged_at_from_csv_with_dates(tmp_path):
+    """Test get_max_merged_at_from_csv returns max merged_at."""
+    csv_file = tmp_path / "report.csv"
+    csv_file.write_text(
+        "pr_url,complexity,developer,date,team,merged_at,created_at,lines_added,lines_deleted,explanation\n"
+        "https://github.com/org/repo/pull/1,5,alice,2024-01-15,Platform,2024-01-15T10:00:00Z,2024-01-10T09:00:00Z,100,50,Test\n"
+        "https://github.com/org/repo/pull/2,3,bob,2024-01-20,Backend,2024-01-20T14:00:00Z,2024-01-18T08:00:00Z,30,20,Fix\n"
+    )
+    result = get_max_merged_at_from_csv(csv_file)
+    assert result is not None
+    assert result.year == 2024
+    assert result.month == 1
+    assert result.day == 20
+
+
 def test_write_csv_row_new_file(tmp_path):
-    """Test writing CSV row to new file."""
+    """Test writing CSV row to new file (uses canonical schema)."""
     csv_file = tmp_path / "results.csv"
 
-    write_csv_row(csv_file, "https://github.com/owner/repo/pull/123", 5, "Test explanation")
+    write_csv_row(csv_file, "https://github.com/owner/repo/pull/123", 5, "Test explanation", "alice")
 
     assert csv_file.exists()
     with csv_file.open("r") as f:
@@ -195,17 +224,18 @@ def test_write_csv_row_new_file(tmp_path):
         assert rows[0]["pr_url"] == "https://github.com/owner/repo/pull/123"
         assert rows[0]["complexity"] == "5"
         assert rows[0]["explanation"] == "Test explanation"
+        assert "developer" in rows[0] or "author" in reader.fieldnames or "developer" in reader.fieldnames
 
 
 def test_write_csv_row_existing_file(tmp_path):
-    """Test writing CSV row to existing file."""
+    """Test writing CSV row to existing file (normalizes to canonical schema)."""
     csv_file = tmp_path / "results.csv"
     csv_file.write_text(
-        "pr_url,complexity,explanation\n"
-        "https://github.com/owner/repo/pull/123,5,Test explanation\n"
+        "pr_url,complexity,developer,date,team,merged_at,created_at,lines_added,lines_deleted,explanation\n"
+        "https://github.com/owner/repo/pull/123,5,alice,2024-01-15,Platform,,,100,50,Test explanation\n"
     )
 
-    write_csv_row(csv_file, "https://github.com/owner/repo/pull/124", 3, "Another explanation")
+    write_csv_row(csv_file, "https://github.com/owner/repo/pull/124", 3, "Another explanation", "bob")
 
     with csv_file.open("r") as f:
         reader = csv.DictReader(f)

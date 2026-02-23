@@ -19,6 +19,7 @@ from .batch import (  # noqa: E402
     generate_pr_list_from_all_repos,
     generate_pr_list_from_date_range,
     generate_pr_list_from_repos_file,
+    get_max_merged_at_from_csv,
     load_pr_urls_from_file,
 )
 from .config import (  # noqa: E402
@@ -169,6 +170,12 @@ def analyze_pr_to_dict(
         title=title,
     )
 
+    # Extract metadata for CSV (merged_at, created_at, additions, deletions)
+    merged_at = meta.get("merged_at") or ""
+    created_at = meta.get("created_at") or ""
+    additions = meta.get("additions")
+    deletions = meta.get("deletions")
+
     # Prepare output
     output = {
         "score": result["complexity"],
@@ -182,6 +189,10 @@ def analyze_pr_to_dict(
         "pr": pr,
         "url": pr_url,
         "title": title,
+        "merged_at": merged_at,
+        "created_at": created_at,
+        "lines_added": additions,
+        "lines_deleted": deletions,
     }
 
     return output
@@ -580,6 +591,9 @@ def batch_analyze(
     limit: Optional[int] = typer.Option(
         None, "--limit", "-n", help="Maximum number of PRs to process (e.g. --limit 10)"
     ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", "--full-sync", help="Ignore existing CSV; fetch full date range (default: incremental fetch from latest CSV data)"
+    ),
 ):
     """
     Batch analyze multiple PRs from a file or date range.
@@ -722,6 +736,14 @@ def batch_analyze(
                 typer.echo("Error: --since date must be before --until date", err=True)
                 raise typer.Exit(1)
 
+            # Incremental fetch: only fetch PRs merged after latest in CSV
+            since_override = None
+            if output_file and not overwrite:
+                max_merged = get_max_merged_at_from_csv(output_file)
+                if max_merged:
+                    next_day = max_merged + timedelta(days=1)
+                    since_override = max(since_dt, next_day)
+
             if all_repos:
                 if not github_token:
                     typer.echo("Error: GitHub token required for --all-repos. Set GH_TOKEN or run `gh auth login`", err=True)
@@ -733,6 +755,7 @@ def batch_analyze(
                     github_token=github_token,
                     sleep_seconds=sleep_seconds,
                     merged_only=True,
+                    since_override=since_override,
                 )
             elif repos_file:
                 pr_urls = generate_pr_list_from_repos_file(
@@ -742,6 +765,7 @@ def batch_analyze(
                     cache_file=cache_file,
                     github_token=github_token,
                     sleep_seconds=sleep_seconds,
+                    since_override=since_override,
                 )
             else:
                 pr_urls = generate_pr_list_from_date_range(
@@ -751,6 +775,7 @@ def batch_analyze(
                     cache_file=cache_file,
                     github_token=github_token,
                     sleep_seconds=sleep_seconds,
+                    since_override=since_override,
                 )
 
         # Create analyzer function with progress callback
@@ -840,6 +865,9 @@ def export_labels(
     sleep_seconds: float = typer.Option(
         DEFAULT_SLEEP_SECONDS, "--sleep-seconds", help="Sleep between GitHub API calls"
     ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", "--full-sync", help="Ignore existing CSV; fetch full date range (default: incremental fetch from latest CSV data)"
+    ),
 ):
     """
     Export existing complexity labels to CSV without re-analyzing.
@@ -890,6 +918,14 @@ def export_labels(
                 typer.echo("Error: --since date must be before --until date", err=True)
                 raise typer.Exit(1)
 
+            # Incremental fetch: only fetch PRs merged after latest in CSV
+            since_override = None
+            if output_file and not overwrite:
+                max_merged = get_max_merged_at_from_csv(output_file)
+                if max_merged:
+                    next_day = max_merged + timedelta(days=1)
+                    since_override = max(since_dt, next_day)
+
             if repos_file:
                 pr_urls = generate_pr_list_from_repos_file(
                     repos_file=repos_file,
@@ -898,6 +934,7 @@ def export_labels(
                     cache_file=cache_file,
                     github_token=github_token,
                     sleep_seconds=sleep_seconds,
+                    since_override=since_override,
                 )
             else:
                 pr_urls = generate_pr_list_from_date_range(
@@ -907,6 +944,7 @@ def export_labels(
                     cache_file=cache_file,
                     github_token=github_token,
                     sleep_seconds=sleep_seconds,
+                    since_override=since_override,
                 )
 
         typer.echo(f"Exporting labels for {len(pr_urls)} PRs to {output_file}...", err=True)
@@ -958,6 +996,141 @@ def export_labels(
     except KeyboardInterrupt:
         typer.echo("\nInterrupted by user", err=True)
         raise typer.Exit(130)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        ErrorHandler.handle_unexpected_error(e, debug=bool(os.getenv("DEBUG")))
+        raise typer.Exit(1)
+
+
+@app.command(name="generate-reports")
+def generate_reports(
+    csv_path: Path = typer.Option(
+        "complexity-report.csv", "--input", "-i", help="Input CSV path"
+    ),
+    output_dir: Path = typer.Option(
+        "reports", "--output", "-o", help="Output directory for report images"
+    ),
+):
+    """
+    Generate engineering intelligence reports from CSV.
+
+    Runs all 17 reports in parallel. No GitHub API calls. Target: <10 seconds total.
+    """
+    try:
+        from reports.runner import run_reports
+
+        if not csv_path.exists():
+            typer.echo(f"Error: CSV not found: {csv_path}", err=True)
+            typer.echo("Run batch-analyze or migrate-csv first.", err=True)
+            raise typer.Exit(1)
+
+        typer.echo(f"Generating reports from {csv_path}...", err=True)
+        generated = run_reports(csv_path=csv_path, output_dir=output_dir)
+        typer.echo(f"✓ Generated {len(generated)} reports in {output_dir}", err=True)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        ErrorHandler.handle_unexpected_error(e, debug=bool(os.getenv("DEBUG")))
+        raise typer.Exit(1)
+
+
+@app.command(name="migrate-csv")
+def migrate_csv(
+    input_path: Path = typer.Option(
+        "complexity-report.csv", "--input", "-i", help="Input CSV path"
+    ),
+    output_path: Path = typer.Option(
+        "complexity-report.csv", "--output", "-o", help="Output CSV path (can be same as input)"
+    ),
+    background: bool = typer.Option(
+        False, "--background", "-b", help="Run migration in background, log to reports/migration.log"
+    ),
+    sleep_seconds: float = typer.Option(
+        DEFAULT_SLEEP_SECONDS, "--sleep-seconds", help="Sleep between GitHub API calls"
+    ),
+):
+    """
+    Enrich existing CSV rows with missing columns.
+
+    Fetches merged_at, created_at, lines_added, lines_deleted from GitHub for rows
+    that need them. Uses teams.yaml for team mapping.
+    """
+    try:
+        from .migrate import run_migration, run_migration_background
+
+        github_token = get_github_token()
+        if not github_token:
+            typer.echo("Warning: GH_TOKEN not set. GitHub API calls may fail for private repos.", err=True)
+
+        if background:
+            pid = run_migration_background(
+                input_path=input_path,
+                output_path=output_path,
+                token=github_token,
+            )
+            log_path = Path.cwd() / "reports" / "migration.log"
+            typer.echo(f"Migration started in background (PID {pid})", err=True)
+            typer.echo(f"Log: {log_path}", err=True)
+            typer.echo("Monitor with: tail -f reports/migration.log", err=True)
+            return
+
+        def progress(msg: str) -> None:
+            typer.echo(msg, err=True)
+
+        typer.echo(f"Migrating {input_path} -> {output_path}...", err=True)
+        enriched = run_migration(
+            input_path=input_path,
+            output_path=output_path,
+            token=github_token,
+            sleep_seconds=sleep_seconds,
+            progress_callback=progress,
+        )
+        typer.echo(f"✓ Enriched {enriched} rows. Output: {output_path}", err=True)
+    except FileNotFoundError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        ErrorHandler.handle_unexpected_error(e, debug=bool(os.getenv("DEBUG")))
+        raise typer.Exit(1)
+
+
+@app.command(name="verify-settings")
+def verify_settings(
+    csv_path: Optional[Path] = typer.Option(
+        None, "--csv", "-c", help="Path to complexity CSV (default: complexity-report.csv)"
+    ),
+    csv_required: bool = typer.Option(
+        False, "--csv-required", help="Fail when CSV is missing"
+    ),
+):
+    """
+    Verify settings required to pull data and generate reports.
+
+    Checks: GH_TOKEN, OPENAI_API_KEY, ANTHROPIC_API_KEY, GitHub rate limit,
+    CSV path, team config, and required CSV columns.
+    """
+    try:
+        from .verify import run_verify_settings
+
+        results = run_verify_settings(csv_path=csv_path, csv_required=csv_required)
+
+        typer.echo("Settings verification:", err=False)
+        typer.echo("", err=False)
+        for name, ok, hint in results:
+            status = "✓" if ok else "✗"
+            line = f"  {status} {name}"
+            if hint:
+                line += f" — {hint}"
+            typer.echo(line, err=False)
+        typer.echo("", err=False)
+
+        failed = sum(1 for _, ok, _ in results if not ok)
+        if failed > 0:
+            typer.echo(f"{failed} check(s) failed. Fix missing settings before running batch-analyze or generate-reports.", err=True)
+            raise typer.Exit(1)
     except typer.Exit:
         raise
     except Exception as e:

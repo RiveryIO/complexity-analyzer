@@ -5,6 +5,11 @@ A command-line tool that uses LLMs to analyze the complexity of GitHub pull requ
 ## Documentation
 
 - **[How Complexity Analysis Works](docs/COMPLEXITY_ANALYSIS.md)** — End-to-end flow, scoring factors, and fine-tuning for your organization
+- **[Features](docs/FEATURES.md)** — Command overview and workflows
+- **[Usage Guide](docs/USAGE_GUIDE.md)** — Setup, first run, incremental sync
+- **[Reports](docs/REPORTS.md)** — All 17 engineering intelligence reports
+- **[Schema](docs/SCHEMA.md)** — CSV columns and migration
+- **[Config](docs/CONFIG.md)** — Environment variables and team mapping
 
 ## Why Measure Complexity?
 
@@ -76,7 +81,24 @@ pip install -e .
 | `analyze-pr` | Analyze a single PR and output complexity score |
 | `label-pr` | Analyze a PR and apply a complexity label to it |
 | `batch-analyze` | Analyze multiple PRs (with optional labeling) |
+| `export-labels` | Export existing labels to CSV (no LLM) |
+| `migrate-csv` | Enrich CSV with merged_at, created_at, lines_added, lines_deleted |
+| `generate-reports` | Generate 17 engineering intelligence reports |
+| `verify-settings` | Check required settings and config |
 | `rate-limit` | Check GitHub API rate limit status |
+
+### Quick Start: Engineering Intelligence Dashboard
+
+```bash
+# 1. Verify setup
+complexity-cli verify-settings
+
+# 2. Batch analyze (incremental by default)
+complexity-cli batch-analyze --all-repos --days 30 -o complexity-report.csv --provider anthropic
+
+# 3. Generate reports (<10 seconds)
+complexity-cli generate-reports -o reports
+```
 
 ### Basic Usage
 

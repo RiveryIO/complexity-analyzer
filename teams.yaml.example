@@ -1,0 +1,7 @@
+# Team mapping: owner/repo -> Team Name
+# Copy to teams.yaml and fill in your values
+# owner/repo: "Team Name"
+# Example:
+# RiveryIO/complexity-analyzer: "Platform"
+# myorg/backend: "Backend"
+# myorg/frontend: "Frontend"

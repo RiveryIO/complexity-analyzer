@@ -3,10 +3,24 @@
 import csv
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .constants import CSV_BATCH_SIZE
 from .io_safety import normalize_path
+
+# Canonical schema for engineering intelligence dashboard
+CSV_FIELDNAMES = [
+    "pr_url",
+    "complexity",
+    "developer",
+    "date",
+    "team",
+    "merged_at",
+    "created_at",
+    "lines_added",
+    "lines_deleted",
+    "explanation",
+]
 
 
 class CSVBatchWriter:
@@ -33,7 +47,7 @@ class CSVBatchWriter:
         """
         self._output_file = output_file
         self._batch_size = batch_size
-        self._fieldnames = fieldnames or ["pr_url", "complexity", "explanation", "author"]
+        self._fieldnames = fieldnames or CSV_FIELDNAMES
         self._buffer: List[Dict[str, str]] = []
         self._lock = threading.Lock()
         self._initialized = False
@@ -66,6 +80,14 @@ class CSVBatchWriter:
         complexity: int,
         explanation: str,
         author: str = "",
+        *,
+        developer: Optional[str] = None,
+        date: Optional[str] = None,
+        team: Optional[str] = None,
+        merged_at: Optional[str] = None,
+        created_at: Optional[str] = None,
+        lines_added: Optional[int] = None,
+        lines_deleted: Optional[int] = None,
     ) -> None:
         """
         Add a row to the buffer, flush if batch size reached.
@@ -74,19 +96,36 @@ class CSVBatchWriter:
             pr_url: PR URL
             complexity: Complexity score
             explanation: Explanation text
-            author: PR author GitHub username
+            author: PR author GitHub username (legacy; alias for developer)
+            developer: Developer login (alias for author)
+            date: Primary date (merged_at date)
+            team: Team name from config
+            merged_at: ISO timestamp when PR was merged
+            created_at: ISO timestamp when PR was opened
+            lines_added: Lines added from GitHub
+            lines_deleted: Lines deleted from GitHub
         """
         with self._lock:
             self._ensure_initialized()
 
-            self._buffer.append(
-                {
-                    "pr_url": pr_url,
-                    "complexity": str(complexity),
-                    "explanation": explanation,
-                    "author": author or "",
-                }
-            )
+            dev = developer if developer is not None else author
+            row: Dict[str, Any] = {
+                "pr_url": pr_url,
+                "complexity": str(complexity),
+                "developer": dev or "",
+                "date": date or "",
+                "team": team or "",
+                "merged_at": merged_at or "",
+                "created_at": created_at or "",
+                "lines_added": str(lines_added) if lines_added is not None else "",
+                "lines_deleted": str(lines_deleted) if lines_deleted is not None else "",
+                "explanation": explanation,
+            }
+            # Ensure all fieldnames present
+            for fn in self._fieldnames:
+                if fn not in row:
+                    row[fn] = ""
+            self._buffer.append(row)
 
             if len(self._buffer) >= self._batch_size:
                 self._flush_unlocked()

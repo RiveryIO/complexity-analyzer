@@ -53,3 +53,6 @@ Thumbs.db
 *.png
 results/
 
+# Reports output (generated charts, migration logs)
+reports/
+

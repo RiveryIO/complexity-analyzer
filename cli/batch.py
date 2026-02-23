@@ -21,8 +21,9 @@ from .github import (
     search_closed_prs_by_repos,
     update_complexity_label,
 )
-from .csv_handler import CSVBatchWriter
+from .csv_handler import CSVBatchWriter, CSV_FIELDNAMES
 from .io_safety import normalize_path, read_text_file
+from .team_config import get_team_for_repo
 from .utils import parse_pr_url
 
 # Get logger
@@ -94,6 +95,7 @@ def generate_pr_list_from_date_range(
     cache_file: Optional[Path],
     github_token: Optional[str],
     sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
+    since_override: Optional[datetime] = None,
 ) -> List[str]:
     """
     Generate PR list from date range, optionally using cache.
@@ -109,10 +111,18 @@ def generate_pr_list_from_date_range(
         cache_file: Optional path to cache file
         github_token: GitHub token
         sleep_seconds: Sleep between API calls
+        since_override: If set, use instead of since (for incremental fetch)
 
     Returns:
         List of PR URLs
     """
+    effective_since = since_override if since_override is not None else since
+    if effective_since != since:
+        typer.echo(
+            f"Incremental fetch: using since={effective_since.date()} (from latest CSV data)",
+            err=True,
+        )
+
     # Check cache first
     if cache_file and cache_file.exists():
         try:
@@ -125,7 +135,8 @@ def generate_pr_list_from_date_range(
 
     # Fetch from GitHub
     typer.echo(
-        f"Fetching closed PRs for org '{org}' from {since.date()} to {until.date()}...", err=True
+        f"Fetching closed PRs for org '{org}' from {effective_since.date()} to {until.date()}...",
+        err=True,
     )
     cache_file_handle = None
     try:
@@ -159,7 +170,7 @@ def generate_pr_list_from_date_range(
             try:
                 urls = search_closed_prs(
                     org=org,
-                    since=since,
+                    since=effective_since,
                     until=until,
                     token=github_token,
                     sleep_s=sleep_seconds,
@@ -178,14 +189,14 @@ def generate_pr_list_from_date_range(
                     )
 
                     # Calculate date range in days
-                    date_range_days = (until - since).days + 1
+                    date_range_days = (until - effective_since).days + 1
 
                     # Start with splitting into halves, but ensure minimum chunk size
                     # Try splitting into progressively smaller chunks
                     chunk_days = max(1, date_range_days // 2)
 
                     all_urls = []
-                    current_since = since
+                    current_since = effective_since
                     chunk_num = 1
                     initial_chunk_days = chunk_days
 
@@ -283,6 +294,7 @@ def generate_pr_list_from_repos_file(
     cache_file: Optional[Path],
     github_token: Optional[str],
     sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
+    since_override: Optional[datetime] = None,
 ) -> List[str]:
     """
     Generate PR list from a file of repo names and a date range.
@@ -310,9 +322,16 @@ def generate_pr_list_from_repos_file(
         except Exception as e:
             typer.echo(f"Warning: Failed to load cache, will fetch from GitHub: {e}", err=True)
 
+    effective_since = since_override if since_override is not None else since
+    if effective_since != since:
+        typer.echo(
+            f"Incremental fetch: using since={effective_since.date()} (from latest CSV data)",
+            err=True,
+        )
+
     repos = load_repos_from_file(repos_file)
     typer.echo(
-        f"Fetching closed PRs for {len(repos)} repo(s) from {since.date()} to {until.date()}...",
+        f"Fetching closed PRs for {len(repos)} repo(s) from {effective_since.date()} to {until.date()}...",
         err=True,
     )
 
@@ -341,7 +360,7 @@ def generate_pr_list_from_repos_file(
         with httpx.Client(timeout=60.0) as client:
             urls = search_closed_prs_by_repos(
                 repos=repos,
-                since=since,
+                since=effective_since,
                 until=until,
                 token=github_token,
                 sleep_s=sleep_seconds,
@@ -375,6 +394,7 @@ def generate_pr_list_from_all_repos(
     github_token: str,
     sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
     merged_only: bool = True,
+    since_override: Optional[datetime] = None,
 ) -> List[str]:
     """
     Generate PR list from all repos the authenticated user has access to.
@@ -407,7 +427,14 @@ def generate_pr_list_from_all_repos(
         token=github_token,
         progress_callback=lambda msg: typer.echo(msg, err=True),
     )
-    typer.echo(f"Found {len(repos)} repos. Searching for {'merged' if merged_only else 'closed'} PRs from {since.date()} to {until.date()}...", err=True)
+    effective_since = since_override if since_override is not None else since
+    if effective_since != since:
+        typer.echo(
+            f"Incremental fetch: using since={effective_since.date()} (from latest CSV data)",
+            err=True,
+        )
+
+    typer.echo(f"Found {len(repos)} repos. Searching for {'merged' if merged_only else 'closed'} PRs from {effective_since.date()} to {until.date()}...", err=True)
 
     cache_file_handle = None
     try:
@@ -434,7 +461,7 @@ def generate_pr_list_from_all_repos(
         with httpx.Client(timeout=60.0) as client:
             urls = search_closed_prs_by_repos(
                 repos=repos,
-                since=since,
+                since=effective_since,
                 until=until,
                 token=github_token,
                 sleep_s=sleep_seconds,
@@ -459,6 +486,38 @@ def generate_pr_list_from_all_repos(
                     typer.echo(f"Saved PR list to cache: {cache_file}", err=True)
             except Exception as e:
                 typer.echo(f"Warning: Failed to close cache file: {e}", err=True)
+
+
+def get_max_merged_at_from_csv(csv_path: Optional[Path]) -> Optional[datetime]:
+    """
+    Get the maximum merged_at date from existing CSV for incremental fetching.
+
+    Returns None if CSV doesn't exist, has no merged_at column, or has no valid dates.
+    """
+    if not csv_path or not csv_path.exists():
+        return None
+    try:
+        max_dt: Optional[datetime] = None
+        with csv_path.open("r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames or "merged_at" not in reader.fieldnames:
+                return None
+            for row in reader:
+                val = (row.get("merged_at") or "").strip()
+                if not val:
+                    continue
+                try:
+                    # Handle ISO format with Z
+                    if val.endswith("Z"):
+                        val = val[:-1] + "+00:00"
+                    dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                    if max_dt is None or dt > max_dt:
+                        max_dt = dt
+                except (ValueError, TypeError):
+                    continue
+        return max_dt
+    except Exception:
+        return None
 
 
 def load_completed_prs(output_file: Path) -> Set[str]:
@@ -551,111 +610,92 @@ def write_csv_row(
                 if has_header:
                     # File has headers, use DictReader
                     reader = csv.DictReader(f)
-                    # Map various possible column names to our standard fieldnames
                     for row in reader:
-                        mapped_row = {}
-                        # Try to find pr_url column (handle various names)
+                        # Normalize column names (handle legacy and various names)
+                        normalized = {}
                         pr_url_val = (
                             row.get("pr_url")
                             or row.get("PR link")
                             or row.get("pr link")
-                            or row.get(list(row.keys())[0] if row else "")
+                            or (list(row.values())[0] if row else "")
                         )
-                        mapped_row["pr_url"] = pr_url_val or ""
-
-                        # Try to find complexity column
-                        complexity_val = (
-                            row.get("complexity")
-                            or row.get("Complexity")
-                            or row.get(list(row.keys())[1] if len(row.keys()) > 1 else "")
-                        )
-                        mapped_row["complexity"] = complexity_val or ""
-
-                        # Try to find explanation column
-                        explanation_val = (
-                            row.get("explanation")
-                            or row.get("Explanation")
-                            or row.get(list(row.keys())[2] if len(row.keys()) > 2 else "")
-                        )
-                        mapped_row["explanation"] = explanation_val or ""
-
-                        author_val = (
-                            row.get("author")
-                            or row.get("Author")
-                            or row.get(list(row.keys())[3] if len(row.keys()) > 3 else "")
-                        )
-                        mapped_row["author"] = author_val or ""
-
-                        existing_rows.append(mapped_row)
+                        normalized["pr_url"] = str(pr_url_val or "").strip()
+                        normalized["complexity"] = str(
+                            row.get("complexity") or row.get("Complexity") or ""
+                        ).strip()
+                        normalized["developer"] = str(
+                            row.get("developer") or row.get("author") or row.get("Author") or ""
+                        ).strip()
+                        normalized["date"] = str(row.get("date") or "").strip()
+                        normalized["team"] = str(row.get("team") or "").strip()
+                        normalized["merged_at"] = str(row.get("merged_at") or "").strip()
+                        normalized["created_at"] = str(row.get("created_at") or "").strip()
+                        normalized["lines_added"] = str(row.get("lines_added") or "").strip()
+                        normalized["lines_deleted"] = str(row.get("lines_deleted") or "").strip()
+                        normalized["explanation"] = str(
+                            row.get("explanation") or row.get("Explanation") or ""
+                        ).strip()
+                        normalized["author"] = normalized["developer"]
+                        existing_rows.append(normalized)
                 else:
                     # File doesn't have headers, use regular reader and map columns
                     reader = csv.reader(f)
                     for row in reader:
-                        if len(row) >= 4:
-                            existing_rows.append(
-                                {
-                                    "pr_url": row[0].strip(),
-                                    "complexity": row[1].strip(),
-                                    "explanation": row[2].strip(),
-                                    "author": row[3].strip(),
-                                }
-                            )
-                        elif len(row) >= 3:
-                            existing_rows.append(
-                                {
-                                    "pr_url": row[0].strip(),
-                                    "complexity": row[1].strip(),
-                                    "explanation": row[2].strip(),
-                                    "author": "",
-                                }
-                            )
-                        elif len(row) >= 2:
-                            # Handle case with just URL and complexity
-                            existing_rows.append(
-                                {
-                                    "pr_url": row[0].strip(),
-                                    "complexity": row[1].strip(),
-                                    "explanation": "",
-                                    "author": "",
-                                }
-                            )
-                        elif len(row) >= 1:
-                            # Handle case with just URL
-                            existing_rows.append(
-                                {
-                                    "pr_url": row[0].strip(),
-                                    "complexity": "",
-                                    "explanation": "",
-                                    "author": "",
-                                }
-                            )
+                        r = {
+                            "pr_url": row[0].strip() if len(row) >= 1 else "",
+                            "complexity": row[1].strip() if len(row) >= 2 else "",
+                            "developer": row[3].strip() if len(row) >= 4 else "",
+                            "explanation": row[2].strip() if len(row) >= 3 else "",
+                            "author": row[3].strip() if len(row) >= 4 else "",
+                            "date": "",
+                            "team": "",
+                            "merged_at": "",
+                            "created_at": "",
+                            "lines_added": "",
+                            "lines_deleted": "",
+                        }
+                        existing_rows.append(r)
         except (csv.Error, IOError, KeyError) as e:
             # If we can't read existing file, start fresh
             logger.debug(f"Could not read existing CSV file: {e}")
             file_exists = False
 
+    # Normalize existing rows to new schema
+    def to_canonical_row(row: Dict[str, str]) -> Dict[str, str]:
+        """Map legacy columns to canonical schema."""
+        dev = row.get("developer") or row.get("author") or ""
+        return {
+            "pr_url": row.get("pr_url", ""),
+            "complexity": row.get("complexity", ""),
+            "developer": dev,
+            "date": row.get("date", ""),
+            "team": row.get("team", ""),
+            "merged_at": row.get("merged_at", ""),
+            "created_at": row.get("created_at", ""),
+            "lines_added": row.get("lines_added", ""),
+            "lines_deleted": row.get("lines_deleted", ""),
+            "explanation": row.get("explanation", ""),
+        }
+
     # Write all rows (existing + new) to temp file
     with tmp_path.open("w", encoding="utf-8", newline="") as f:
-        fieldnames = ["pr_url", "complexity", "explanation", "author"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-
-        # Always write header (even if file existed, we're standardizing the format)
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES)
         writer.writeheader()
 
-        # Write existing rows (ensure author key exists for backward compat)
         for row in existing_rows:
-            if "author" not in row:
-                row["author"] = ""
-            writer.writerow(row)
+            canonical = to_canonical_row(row)
+            writer.writerow(canonical)
 
         # Write new row
         writer.writerow(
-            {
-                "pr_url": pr_url,
-                "complexity": complexity,
-                "explanation": explanation,
-                "author": author or "",
-            }
+            to_canonical_row(
+                {
+                    "pr_url": pr_url,
+                    "complexity": str(complexity),
+                    "author": author or "",
+                    "explanation": explanation,
+                }
+            )
         )
 
     # Atomic replace
@@ -709,8 +749,8 @@ def run_batch_analysis(
 
     def process_single_pr(
         pr_url: str, idx: int
-    ) -> Tuple[str, Optional[int], Optional[str], Optional[str], Optional[Exception]]:
-        """Process a single PR and return result or error."""
+    ) -> Tuple[str, Optional[Dict[str, Any]], Optional[Exception]]:
+        """Process a single PR and return (url, result, error)."""
         try:
             if workers == 1:
                 typer.echo(f"\n[{idx}/{remaining_count}] Analyzing {pr_url}...", err=True)
@@ -718,18 +758,37 @@ def run_batch_analysis(
                 typer.echo(f"[{idx}/{remaining_count}] Analyzing {pr_url}...", err=True)
 
             result = analyze_fn(pr_url)
-
-            # Extract complexity, explanation, and author
-            complexity = result.get("score", result.get("complexity", 0))
-            explanation = result.get("explanation", "")
-            author = result.get("author", "") or ""
-
-            return pr_url, complexity, explanation, author, None
+            return pr_url, result, None
         except Exception as e:
-            return pr_url, None, None, None, e
+            return pr_url, None, e
 
     # Use thread-safe CSV writer for all cases
     csv_writer = CSVBatchWriter(output_file)
+
+    def _write_row_from_result(pr_url_result: str, result: Dict[str, Any]) -> None:
+        """Extract fields from result and write to CSV."""
+        complexity = result.get("score", result.get("complexity", 0))
+        author = result.get("author", "") or ""
+        owner, repo = parse_pr_url(pr_url_result)[:2]
+        team = get_team_for_repo(owner, repo)
+        merged_at = result.get("merged_at") or ""
+        created_at = result.get("created_at") or ""
+        date = merged_at[:10] if merged_at else ""
+        lines_added = result.get("lines_added")
+        lines_deleted = result.get("lines_deleted")
+        csv_writer.add_row(
+            pr_url_result,
+            complexity,
+            result.get("explanation", ""),
+            author,
+            developer=author,
+            date=date,
+            team=team,
+            merged_at=merged_at,
+            created_at=created_at,
+            lines_added=lines_added,
+            lines_deleted=lines_deleted,
+        )
 
     try:
         # Process PRs sequentially or in parallel
@@ -737,7 +796,7 @@ def run_batch_analysis(
             # Sequential processing (original behavior)
             for idx, pr_url in enumerate(remaining, 1):
                 try:
-                    pr_url_result, complexity, explanation, author, error = process_single_pr(pr_url, idx)
+                    pr_url_result, result, error = process_single_pr(pr_url, idx)
 
                     if error:
                         # Handle 404 errors (PR not found) with a clearer message
@@ -755,9 +814,8 @@ def run_batch_analysis(
                         typer.echo("Continuing with next PR...", err=True)
                         continue
 
-                    # Write to CSV using thread-safe writer
-                    csv_writer.add_row(pr_url_result, complexity, explanation, author or "")
-                    typer.echo(f"✓ Completed: complexity={complexity}", err=True)
+                    _write_row_from_result(pr_url_result, result)
+                    typer.echo(f"✓ Completed: complexity={result.get('score', 0)}", err=True)
 
                 except KeyboardInterrupt:
                     typer.echo(
@@ -779,7 +837,7 @@ def run_batch_analysis(
                     for future in as_completed(future_to_pr):
                         pr_url, idx = future_to_pr[future]
                         try:
-                            pr_url_result, complexity, explanation, author, error = future.result()
+                            pr_url_result, result, error = future.result()
 
                             if error:
                                 # Handle 404 errors (PR not found) with a clearer message
@@ -799,13 +857,12 @@ def run_batch_analysis(
                                 typer.echo("Continuing with next PR...", err=True)
                                 continue
 
-                            # Write to CSV using thread-safe writer
-                            csv_writer.add_row(pr_url_result, complexity, explanation, author or "")
+                            _write_row_from_result(pr_url_result, result)
 
                             with completed_lock:
                                 completed_count[0] += 1
                                 typer.echo(
-                                    f"✓ [{completed_count[0]}/{remaining_count}] Completed {pr_url_result}: complexity={complexity}",
+                                    f"✓ [{completed_count[0]}/{remaining_count}] Completed {pr_url_result}: complexity={result.get('score', 0)}",
                                     err=True,
                                 )
 
@@ -928,8 +985,8 @@ def run_batch_analysis_with_labels(
 
     def process_single_pr(
         pr_url: str, idx: int
-    ) -> Tuple[str, Optional[int], Optional[str], Optional[str], Optional[str], Optional[Exception]]:
-        """Process a single PR: analyze and optionally label. Returns (url, complexity, explanation, author, label_applied, error)."""
+    ) -> Tuple[str, Optional[Dict[str, Any]], Optional[str], Optional[Exception]]:
+        """Process a single PR: analyze and optionally label. Returns (url, result, label_applied, error)."""
         try:
             if workers == 1:
                 typer.echo(f"\n[{idx}/{remaining_count}] Analyzing {pr_url}...", err=True)
@@ -938,10 +995,8 @@ def run_batch_analysis_with_labels(
 
             result = analyze_fn(pr_url)
 
-            # Extract complexity, explanation, and author
             complexity = result.get("score", result.get("complexity", 0))
             explanation = result.get("explanation", "")
-            author = result.get("author", "") or ""
 
             label_applied = None
 
@@ -964,9 +1019,9 @@ def run_batch_analysis_with_labels(
                         f"  Warning: Failed to apply label to {pr_url}: {label_error}", err=True
                     )
 
-            return pr_url, complexity, explanation, author, label_applied, None
+            return pr_url, result, label_applied, None
         except Exception as e:
-            return pr_url, None, None, None, None, e
+            return pr_url, None, None, e
 
     # Use thread-safe CSV writer if output_file is provided
     csv_writer = CSVBatchWriter(output_file) if output_file else None
@@ -977,9 +1032,7 @@ def run_batch_analysis_with_labels(
             # Sequential processing
             for idx, pr_url in enumerate(remaining, 1):
                 try:
-                    pr_url_result, complexity, explanation, author, label_applied, error = (
-                        process_single_pr(pr_url, idx)
-                    )
+                    pr_url_result, result, label_applied, error = process_single_pr(pr_url, idx)
 
                     if error:
                         if isinstance(error, GitHubAPIError) and error.status_code == 404:
@@ -992,9 +1045,31 @@ def run_batch_analysis_with_labels(
                         typer.echo("Continuing with next PR...", err=True)
                         continue
 
+                    complexity = result.get("score", result.get("complexity", 0))
+                    author = result.get("author", "") or ""
+                    owner, repo = parse_pr_url(pr_url_result)[:2]
+                    team = get_team_for_repo(owner, repo)
+                    merged_at = result.get("merged_at") or ""
+                    created_at = result.get("created_at") or ""
+                    date = merged_at[:10] if merged_at else ""
+                    lines_added = result.get("lines_added")
+                    lines_deleted = result.get("lines_deleted")
+
                     # Write to CSV using thread-safe writer
                     if csv_writer:
-                        csv_writer.add_row(pr_url_result, complexity, explanation, author or "")
+                        csv_writer.add_row(
+                            pr_url_result,
+                            complexity,
+                            result.get("explanation", ""),
+                            author,
+                            developer=author,
+                            date=date,
+                            team=team,
+                            merged_at=merged_at,
+                            created_at=created_at,
+                            lines_added=lines_added,
+                            lines_deleted=lines_deleted,
+                        )
 
                     if label_applied:
                         typer.echo(
@@ -1021,14 +1096,7 @@ def run_batch_analysis_with_labels(
                     for future in as_completed(future_to_pr):
                         pr_url, idx = future_to_pr[future]
                         try:
-                            (
-                                pr_url_result,
-                                complexity,
-                                explanation,
-                                author,
-                                label_applied,
-                                error,
-                            ) = future.result()
+                            pr_url_result, result, label_applied, error = future.result()
 
                             if error:
                                 if isinstance(error, GitHubAPIError) and error.status_code == 404:
@@ -1042,9 +1110,31 @@ def run_batch_analysis_with_labels(
                                     )
                                 continue
 
+                            complexity = result.get("score", result.get("complexity", 0))
+                            author = result.get("author", "") or ""
+                            owner, repo = parse_pr_url(pr_url_result)[:2]
+                            team = get_team_for_repo(owner, repo)
+                            merged_at = result.get("merged_at") or ""
+                            created_at = result.get("created_at") or ""
+                            date = merged_at[:10] if merged_at else ""
+                            lines_added = result.get("lines_added")
+                            lines_deleted = result.get("lines_deleted")
+
                             # Write to CSV using thread-safe writer
                             if csv_writer:
-                                csv_writer.add_row(pr_url_result, complexity, explanation, author or "")
+                                csv_writer.add_row(
+                                    pr_url_result,
+                                    complexity,
+                                    result.get("explanation", ""),
+                                    author,
+                                    developer=author,
+                                    date=date,
+                                    team=team,
+                                    merged_at=merged_at,
+                                    created_at=created_at,
+                                    lines_added=lines_added,
+                                    lines_deleted=lines_deleted,
+                                )
 
                             with completed_lock:
                                 completed_count[0] += 1
