@@ -59,7 +59,7 @@ cache/
 # Reports output (generated charts, migration logs) - keep reports/*.py tracked
 reports/*.log
 reports/core/*.png
-reports/team/*.png
+reports/team/**/*.png
 reports/risk/*.png
 reports/fairness/*.png
 reports/advanced/*.png

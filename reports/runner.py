@@ -69,10 +69,12 @@ def run_reports(
         from reports.core import report_complexity_volume_over_time
         from reports.core import report_pr_count_vs_complexity
         from reports.core import report_avg_complexity_rolling
+        from reports.core import report_avg_merge_cycle_time
         from reports.core import report_high_complexity_frequency
         from reports.team import report_complexity_distribution_by_team
         from reports.team import report_developer_contribution
         from reports.team import report_complexity_per_dev_vs_pr_count
+        from reports.team import report_avg_merge_cycle_time_by_team
         from reports.team import report_complexity_vs_cycle_time
         from reports.team import report_complexity_per_team_per_dev
         from reports.team import report_team_gini
@@ -89,10 +91,12 @@ def run_reports(
             (report_complexity_volume_by_month, "core"),
             (report_pr_count_vs_complexity, "core"),
             (report_avg_complexity_rolling, "core"),
+            (report_avg_merge_cycle_time, "core"),
             (report_high_complexity_frequency, "core"),
             (report_complexity_distribution_by_team, "team"),
             (report_developer_contribution, "team"),
             (report_complexity_per_dev_vs_pr_count, "team"),
+            (report_avg_merge_cycle_time_by_team, "team"),
             (report_complexity_vs_cycle_time, "team"),
             (report_complexity_per_team_per_dev, "team"),
             (report_team_gini, "team"),

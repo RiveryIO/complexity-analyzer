@@ -1,6 +1,7 @@
 """Team-level leadership reports (4-6, 12, 14, 17)."""
 
 from .reports import (
+    report_avg_merge_cycle_time_by_team,
     report_complexity_distribution_by_team,
     report_complexity_per_dev_vs_pr_count,
     report_complexity_per_team_per_dev,

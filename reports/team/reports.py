@@ -54,7 +54,9 @@ def report_complexity_distribution_by_team(df: pd.DataFrame, output_dir: Path) -
     plt.suptitle("")
     ax.tick_params(axis="x", rotation=45)
     fig.tight_layout()
-    out = output_dir / "04-complexity-distribution-by-team.png"
+    overview_dir = output_dir / "overview"
+    overview_dir.mkdir(parents=True, exist_ok=True)
+    out = overview_dir / "04-complexity-distribution-by-team.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
@@ -99,7 +101,9 @@ def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optiona
         ax.legend(bbox_to_anchor=(1.02, 1), ncol=2)
         fig.tight_layout()
         safe_team = "".join(c if c.isalnum() or c in "-_" else "_" for c in team)
-        out = output_dir / f"05-developer-contribution-{safe_team}.png"
+        team_dir = output_dir / safe_team
+        team_dir.mkdir(parents=True, exist_ok=True)
+        out = team_dir / "05-developer-contribution.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
         plt.close(fig)
         if validate_png_has_content(out):
@@ -140,12 +144,50 @@ def report_complexity_per_dev_vs_pr_count(df: pd.DataFrame, output_dir: Path) ->
         ax.set_ylabel("Total Complexity")
         fig.tight_layout()
         safe_team = "".join(c if c.isalnum() or c in "-_" else "_" for c in team)
-        out = output_dir / f"06-complexity-per-dev-vs-pr-count-{safe_team}.png"
+        team_dir = output_dir / safe_team
+        team_dir.mkdir(parents=True, exist_ok=True)
+        out = team_dir / "06-complexity-per-dev-vs-pr-count.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
         plt.close(fig)
         if validate_png_has_content(out):
             generated.append(str(out))
     return generated if generated else None
+
+
+def report_avg_merge_cycle_time_by_team(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
+    """Report: Average Merge Cycle Time per Team (created_at → merged_at)."""
+    if "created_at" not in df.columns or "merged_at" not in df.columns:
+        return None
+    df = df.copy()
+    df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
+    df = df[df["team"] != "Unknown"]
+    df = df.dropna(subset=["created_at", "merged_at"])
+    df["cycle_hours"] = (
+        pd.to_datetime(df["merged_at"]) - pd.to_datetime(df["created_at"])
+    ).dt.total_seconds() / 3600
+    df = df[df["cycle_hours"] >= 0]
+    if df.empty:
+        return None
+    team_avg = df.groupby("team")["cycle_hours"].mean().sort_values(ascending=False)
+    if not has_plottable_series(team_avg):
+        return None
+    fig, ax = plt.subplots(figsize=(10, 6))
+    team_avg.plot(kind="bar", ax=ax, color="teal", edgecolor="darkgreen")
+    ax.set_title(
+        "Average Merge Cycle Time per Team\n"
+        "What: Time from PR creation to merge by team. When: Process comparison. How: created_at → merged_at in hours."
+    )
+    ax.set_ylabel("Avg Cycle Time (hours)")
+    ax.set_xlabel("Team")
+    ax.tick_params(axis="x", rotation=45)
+    ax.set_ylim(bottom=0)
+    fig.tight_layout()
+    overview_dir = output_dir / "overview"
+    overview_dir.mkdir(parents=True, exist_ok=True)
+    out = overview_dir / "20-avg-merge-cycle-time-by-team.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return str(out) if validate_png_has_content(out) else None
 
 
 def report_complexity_vs_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
@@ -180,7 +222,9 @@ def report_complexity_vs_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optio
     ax.set_xlabel("Complexity")
     ax.set_ylabel("Cycle Time (hours)")
     fig.tight_layout()
-    out = output_dir / "14-complexity-vs-cycle-time.png"
+    overview_dir = output_dir / "overview"
+    overview_dir.mkdir(parents=True, exist_ok=True)
+    out = overview_dir / "14-complexity-vs-cycle-time.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
@@ -211,7 +255,9 @@ def report_complexity_per_team_per_dev(df: pd.DataFrame, output_dir: Path) -> Op
     ax.set_xlabel("Team")
     ax.tick_params(axis="x", rotation=45)
     fig.tight_layout()
-    out = output_dir / "17-complexity-per-team-per-dev.png"
+    overview_dir = output_dir / "overview"
+    overview_dir.mkdir(parents=True, exist_ok=True)
+    out = overview_dir / "17-complexity-per-team-per-dev.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
@@ -237,7 +283,9 @@ def report_team_gini(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
     ax.set_xlabel("Team")
     ax.tick_params(axis="x", rotation=45)
     fig.tight_layout()
-    out = output_dir / "12-team-gini.png"
+    overview_dir = output_dir / "overview"
+    overview_dir.mkdir(parents=True, exist_ok=True)
+    out = overview_dir / "12-team-gini.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(out) if validate_png_has_content(out) else None

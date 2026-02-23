@@ -135,21 +135,65 @@ def report_avg_complexity_rolling(df: pd.DataFrame, output_dir: Path) -> Optiona
     return str(out) if validate_png_has_content(out) else None
 
 
+def report_avg_merge_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
+    """Report: Average Merge Cycle Time (created_at → merged_at) by week."""
+    if "created_at" not in df.columns or "merged_at" not in df.columns:
+        return None
+    df = df.copy()
+    df = df.dropna(subset=["created_at", "merged_at"])
+    df["cycle_hours"] = (
+        pd.to_datetime(df["merged_at"]) - pd.to_datetime(df["created_at"])
+    ).dt.total_seconds() / 3600
+    df = df[df["cycle_hours"] >= 0]
+    if df.empty:
+        return None
+    merged = pd.to_datetime(df["merged_at"])
+    if merged.dt.tz is not None:
+        merged = merged.dt.tz_localize(None, ambiguous="infer")
+    df["week"] = merged.dt.to_period("W").dt.start_time
+    weekly = df.groupby("week")["cycle_hours"].mean()
+    if not has_plottable_series(weekly):
+        return None
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(weekly.index, weekly.values, "b-o", markersize=4)
+    ax.set_title(
+        "Average Merge Cycle Time (by Week)\n"
+        "What: Time from PR creation to merge. When: Process health. How: created_at → merged_at in hours."
+    )
+    ax.set_ylabel("Avg Cycle Time (hours)")
+    ax.set_xlabel("Week (merge date)")
+    ax.tick_params(axis="x", rotation=45)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    ax.set_ylim(bottom=0)
+    fig.tight_layout()
+    out = output_dir / "19-avg-merge-cycle-time.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return str(out) if validate_png_has_content(out) else None
+
+
 def report_high_complexity_frequency(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
-    """Report 7: High Complexity PR Frequency (% PRs >= 8 per team)."""
+    """Report 7: High Complexity PR Frequency (% PRs >= 6 per team)."""
     df = df.copy()
     df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
-    high = df[df["complexity"] >= 8]
+    df = df[df["team"] != "Unknown"]
+    if df.empty:
+        return None
+    high = df[df["complexity"] >= 6]
     total = df.groupby("team").size()
     high_count = high.groupby("team").size()
     pct = (high_count.reindex(total.index, fill_value=0) / total * 100).fillna(0)
     if total.sum() == 0 or not has_plottable_series(total):
         return None
+    if not has_plottable_series(pct):
+        return None
     fig, ax = plt.subplots(figsize=(10, 6))
     pct.plot(kind="bar", ax=ax, color="coral", edgecolor="darkred")
+    ax.set_ylim(bottom=0)
     ax.set_title(
-        "% High-Risk PRs (complexity >= 8) per Team\n"
-        "What: Share of risky PRs per team. When: Risk review. How: High % = more review focus needed."
+        "% High-Risk PRs (complexity >= 6) per Team\n"
+        "What: Share of risky PRs per team. When: Risk review. How: High % = more review focus needed. "
+        "Note: Threshold 6 used for meaningful distribution (8+ often yields sparse data)."
     )
     ax.set_ylabel("% of PRs")
     ax.set_xlabel("Team")
