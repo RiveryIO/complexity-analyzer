@@ -35,13 +35,16 @@ def report_complexity_vs_merge_weekday(df: pd.DataFrame, output_dir: Path) -> Op
         return None
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.bar(avg.index, avg.values, color="teal", alpha=0.8)
-    ax.set_title("Average Complexity by Merge Day of Week")
+    ax.set_title(
+        "Average Complexity by Merge Day of Week\n"
+        "What: When do complex PRs get merged. When: Schedule planning. How: Friday merges may need more review."
+    )
     ax.set_ylabel("Avg Complexity")
     ax.set_xlabel("Weekday")
-    plt.tight_layout()
+    fig.tight_layout()
     out = output_dir / "08-complexity-vs-merge-weekday.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
 
 
@@ -53,11 +56,14 @@ def report_complexity_histogram(df: pd.DataFrame, output_dir: Path) -> Optional[
         return None
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.hist(df["complexity"], bins=range(1, 12), align="left", edgecolor="black", alpha=0.7)
-    ax.set_title("Complexity Distribution (Org-wide)")
+    ax.set_title(
+        "Complexity Distribution (Org-wide)\n"
+        "What: How many PRs at each complexity level. When: Calibration. How: Most PRs should be 1–5."
+    )
     ax.set_xlabel("Complexity Score")
     ax.set_ylabel("Count")
-    plt.tight_layout()
+    fig.tight_layout()
     out = output_dir / "09-complexity-histogram.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None

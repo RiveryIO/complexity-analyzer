@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -32,15 +33,19 @@ def report_complexity_weighted_velocity(df: pd.DataFrame, output_dir: Path) -> O
     if not has_plottable_series(velocity):
         return None
     fig, ax = plt.subplots(figsize=(12, 6))
+    velocity.index = pd.to_datetime(velocity.index).strftime("%Y-%m-%d")
     velocity.plot(kind="bar", ax=ax, color="green", alpha=0.8)
-    ax.set_title("Complexity Weighted Velocity (per Sprint, per Developer)")
+    ax.set_title(
+        "Complexity Weighted Velocity (per Sprint, per Developer)\n"
+        "What: Output per sprint normalized by headcount. When: Sprint reviews. How: Compare bars for velocity trends."
+    )
     ax.set_ylabel("Complexity / #developers")
     ax.set_xlabel("Sprint")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
     out = output_dir / "13-complexity-weighted-velocity.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
 
 
@@ -52,6 +57,7 @@ def report_complexity_trend_by_team(df: pd.DataFrame, output_dir: Path) -> Optio
     df = df.copy()
     df["week"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
     df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
+    df = df[df["team"] != "Unknown"]
     teams_with_data = [
         t for t in df["team"].unique()
         if not df[df["team"] == t].groupby("week")["complexity"].median().rolling(4, min_periods=1).mean().dropna().empty
@@ -59,20 +65,27 @@ def report_complexity_trend_by_team(df: pd.DataFrame, output_dir: Path) -> Optio
     if not teams_with_data:
         return None
     fig, ax = plt.subplots(figsize=(12, 6))
+    df = df[df["team"] != "Unknown"]
+    if df.empty:
+        return None
     for team in df["team"].unique():
-        if team == "Unknown" and df["team"].nunique() > 1:
-            continue
         tdf = df[df["team"] == team].groupby("week")["complexity"].median().rolling(4, min_periods=1).mean()
-        ax.plot(tdf.index, tdf.values, label=team or "Unknown")
-    ax.set_title("Complexity Trend by Team (Rolling Median 4w)")
+        if tdf.dropna().empty:
+            continue
+        ax.plot(tdf.index, tdf.values, label=team)
+    ax.set_title(
+        "Complexity Trend by Team (Rolling Median 4w)\n"
+        "What: Smoothed complexity trend per team. When: Track team evolution. How: Rising line = harder PRs."
+    )
     ax.set_ylabel("Rolling Median Complexity")
     ax.set_xlabel("Week")
     ax.legend()
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
+    ax.tick_params(axis="x", rotation=45)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    fig.tight_layout()
     out = output_dir / "15-complexity-trend-by-team.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
 
 
@@ -89,12 +102,16 @@ def report_cumulative_complexity(df: pd.DataFrame, output_dir: Path) -> Optional
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.fill_between(df["date"], df["cumulative"], alpha=0.5)
     ax.plot(df["date"], df["cumulative"], "b-")
-    ax.set_title("Cumulative Complexity Over Time")
+    ax.set_title(
+        "Cumulative Complexity Over Time\n"
+        "What: Running total of complexity. When: Long-term progress. How: Steeper slope = more delivery."
+    )
     ax.set_ylabel("Cumulative Complexity")
     ax.set_xlabel("Date")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
+    ax.tick_params(axis="x", rotation=45)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    fig.tight_layout()
     out = output_dir / "16-cumulative-complexity.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None

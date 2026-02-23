@@ -423,12 +423,6 @@ def generate_pr_list_from_all_repos(
         except Exception as e:
             typer.echo(f"Warning: Failed to load cache, will fetch from GitHub: {e}", err=True)
 
-    typer.echo("Fetching all repos for authenticated user...", err=True)
-    repos = list_user_repos(
-        token=github_token,
-        progress_callback=lambda msg: typer.echo(msg, err=True),
-        pushed_since=effective_since,
-    )
     effective_since = since_override if since_override is not None else since
     if effective_since != since:
         typer.echo(
@@ -436,6 +430,32 @@ def generate_pr_list_from_all_repos(
             err=True,
         )
 
+    repos_cache_path = (cache_file.parent / "repos.txt") if cache_file else None
+    if repos_cache_path and repos_cache_path.exists():
+        try:
+            typer.echo(f"Loading repos from cache: {repos_cache_path}", err=True)
+            repos = load_repos_from_file(repos_cache_path)
+            typer.echo(f"Loaded {len(repos)} repos from cache", err=True)
+        except Exception as e:
+            typer.echo(f"Warning: Failed to load repos cache: {e}", err=True)
+            repos = None
+    else:
+        repos = None
+
+    if repos is None:
+        typer.echo("Fetching all repos for authenticated user...", err=True)
+        repos = list_user_repos(
+            token=github_token,
+            progress_callback=lambda msg: typer.echo(msg, err=True),
+            pushed_since=effective_since,
+        )
+        if repos_cache_path and repos:
+            try:
+                repos_cache_path.parent.mkdir(parents=True, exist_ok=True)
+                repos_cache_path.write_text("\n".join(repos) + "\n", encoding="utf-8")
+                typer.echo(f"Saved {len(repos)} repos to cache: {repos_cache_path}", err=True)
+            except Exception as e:
+                typer.echo(f"Warning: Failed to save repos cache: {e}", err=True)
     typer.echo(
         f"Found {len(repos)} active repos (filtered by pushed_since). "
         f"Searching for {'merged' if merged_only else 'closed'} PRs from "

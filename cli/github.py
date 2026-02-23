@@ -3,7 +3,7 @@
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import httpx
@@ -1126,7 +1126,13 @@ def list_user_repos(
                             dt = datetime.fromisoformat(
                                 pushed_at.replace("Z", "+00:00")
                             )
-                            if dt < pushed_since:
+                            # Make pushed_since timezone-aware for comparison
+                            since_aware = (
+                                pushed_since
+                                if pushed_since.tzinfo
+                                else pushed_since.replace(tzinfo=timezone.utc)
+                            )
+                            if dt < since_aware:
                                 continue
                         except (ValueError, TypeError):
                             continue

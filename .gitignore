@@ -53,7 +53,14 @@ Thumbs.db
 *.png
 results/
 
+# Fetch cache (repos list, PR URLs)
+cache/
+
 # Reports output (generated charts, migration logs) - keep reports/*.py tracked
-reports/*.png
 reports/*.log
+reports/core/*.png
+reports/team/*.png
+reports/risk/*.png
+reports/fairness/*.png
+reports/advanced/*.png
 

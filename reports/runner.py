@@ -5,7 +5,7 @@ matplotlib.use("Agg")  # Non-GUI backend for parallel/headless use
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Union
 
 import pandas as pd
 
@@ -65,6 +65,7 @@ def run_reports(
         return []
 
     if report_fns is None:
+        from reports.core import report_complexity_volume_by_month
         from reports.core import report_complexity_volume_over_time
         from reports.core import report_pr_count_vs_complexity
         from reports.core import report_avg_complexity_rolling
@@ -84,38 +85,54 @@ def run_reports(
         from reports.advanced import report_cumulative_complexity
 
         report_fns = [
-            report_complexity_volume_over_time,
-            report_pr_count_vs_complexity,
-            report_avg_complexity_rolling,
-            report_high_complexity_frequency,
-            report_complexity_distribution_by_team,
-            report_developer_contribution,
-            report_complexity_per_dev_vs_pr_count,
-            report_complexity_vs_cycle_time,
-            report_complexity_per_team_per_dev,
-            report_team_gini,
-            report_complexity_vs_merge_weekday,
-            report_complexity_histogram,
-            report_pr_size_vs_complexity,
-            report_pr_count_vs_avg_complexity,
-            report_complexity_weighted_velocity,
-            report_complexity_trend_by_team,
-            report_cumulative_complexity,
+            (report_complexity_volume_over_time, "core"),
+            (report_complexity_volume_by_month, "core"),
+            (report_pr_count_vs_complexity, "core"),
+            (report_avg_complexity_rolling, "core"),
+            (report_high_complexity_frequency, "core"),
+            (report_complexity_distribution_by_team, "team"),
+            (report_developer_contribution, "team"),
+            (report_complexity_per_dev_vs_pr_count, "team"),
+            (report_complexity_vs_cycle_time, "team"),
+            (report_complexity_per_team_per_dev, "team"),
+            (report_team_gini, "team"),
+            (report_complexity_vs_merge_weekday, "risk"),
+            (report_complexity_histogram, "risk"),
+            (report_pr_size_vs_complexity, "fairness"),
+            (report_pr_count_vs_avg_complexity, "fairness"),
+            (report_complexity_weighted_velocity, "advanced"),
+            (report_complexity_trend_by_team, "advanced"),
+            (report_cumulative_complexity, "advanced"),
         ]
+    else:
+        # Normalize: (fn, subdir) or plain fn -> (fn, ".")
+        normalized = []
+        for item in report_fns:
+            if isinstance(item, tuple):
+                normalized.append(item)
+            else:
+                normalized.append((item, "."))
+        report_fns = normalized
 
     generated: List[str] = []
 
-    def run_one(fn: Callable) -> Optional[str]:
+    def run_one(item: tuple) -> Optional[Union[str, List[str]]]:
+        fn, subdir = item
+        topic_dir = output_dir / subdir
+        topic_dir.mkdir(parents=True, exist_ok=True)
         try:
-            return fn(df.copy(), output_dir)
+            return fn(df.copy(), topic_dir)
         except Exception:
             return None
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(run_one, fn): fn for fn in report_fns}
+        futures = {executor.submit(run_one, item): item for item in report_fns}
         for future in as_completed(futures):
-            path = future.result()
-            if path:
-                generated.append(path)
+            result = future.result()
+            if result:
+                if isinstance(result, list):
+                    generated.extend(result)
+                else:
+                    generated.append(result)
 
     return generated

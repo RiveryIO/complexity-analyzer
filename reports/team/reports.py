@@ -1,12 +1,13 @@
 """Team-level leadership reports."""
 
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from cli.team_config import load_team_mapping
 from reports.validation import (
     has_plottable_agg,
     has_plottable_scatter,
@@ -38,85 +39,131 @@ def report_complexity_distribution_by_team(df: pd.DataFrame, output_dir: Path) -
     """Report 4: Complexity Distribution by Team - boxplot."""
     df = df.copy()
     df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
-    if df["team"].nunique() == 0:
+    df = df[df["team"] != "Unknown"]
+    if df.empty or df["team"].nunique() == 0:
         return None
     if not has_plottable_series(df["complexity"]):
         return None
     fig, ax = plt.subplots(figsize=(10, 6))
     df.boxplot(column="complexity", by="team", ax=ax)
-    ax.set_title("Complexity Distribution by Team")
+    ax.set_title(
+        "Complexity Distribution by Team\n"
+        "What: Boxplot of complexity per team. When: Compare team patterns. How: Wide box = high variance."
+    )
     ax.set_ylabel("Complexity")
     plt.suptitle("")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
     out = output_dir / "04-complexity-distribution-by-team.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
 
 
-def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
-    """Report 5: Developer Complexity Contribution - stacked by sprint."""
+def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optional[Union[str, List[str]]]:
+    """Report 5: Developer Complexity Contribution - stacked by sprint, one per team."""
+    mapping = load_team_mapping()
+    if not mapping:
+        return None
     df = _ensure_date(df)
     if df.empty:
         return None
     df = df.copy()
-    df["sprint"] = pd.to_datetime(df["date"]).dt.to_period("2W").dt.start_time
     dev_col = "developer" if "developer" in df.columns else "author"
     df["developer"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").astype(str)
+    df["team"] = df["developer"].map(lambda d: mapping.get(d, "") if d else "")
+    df = df[df["team"] != ""]
     df = df[df["developer"] != ""]
     if df.empty:
         return None
-    pivot = df.pivot_table(
-        index="sprint", columns="developer", values="complexity", aggfunc="sum", fill_value=0
-    )
-    pivot = pivot.reindex(pivot.sum().sort_values(ascending=False).index, axis=1)
-    if not has_plottable_agg(pivot):
+    df["sprint"] = pd.to_datetime(df["date"]).dt.to_period("2W").dt.start_time
+    generated = []
+    for team in df["team"].unique():
+        tdf = df[df["team"] == team]
+        pivot = tdf.pivot_table(
+            index="sprint", columns="developer", values="complexity", aggfunc="sum", fill_value=0
+        )
+        pivot = pivot.reindex(pivot.sum().sort_values(ascending=False).index, axis=1)
+        if not has_plottable_agg(pivot):
+            continue
+        pivot.index = pd.to_datetime(pivot.index).strftime("%Y-%m-%d")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        pivot.plot(kind="bar", stacked=True, ax=ax, width=0.8, legend=True)
+        ax.set_title(
+            f"Developer Complexity Contribution — {team} (per Sprint)\n"
+            "What: Who delivered what per sprint. When: Sprint reviews. How: Compare stacked bars."
+        )
+        ax.set_ylabel("Complexity")
+        ax.set_xlabel("Sprint")
+        ax.tick_params(axis="x", rotation=45)
+        ax.legend(bbox_to_anchor=(1.02, 1), ncol=2)
+        fig.tight_layout()
+        safe_team = "".join(c if c.isalnum() or c in "-_" else "_" for c in team)
+        out = output_dir / f"05-developer-contribution-{safe_team}.png"
+        fig.savefig(out, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        if validate_png_has_content(out):
+            generated.append(str(out))
+    return generated if generated else None
+
+
+def report_complexity_per_dev_vs_pr_count(df: pd.DataFrame, output_dir: Path) -> Optional[Union[str, List[str]]]:
+    """Report 6: Complexity per Dev vs PR Count - scatter, one per team."""
+    mapping = load_team_mapping()
+    if not mapping:
         return None
-    fig, ax = plt.subplots(figsize=(12, 6))
-    pivot.plot(kind="bar", stacked=True, ax=ax, width=0.8)
-    ax.set_title("Developer Complexity Contribution (per Sprint)")
-    ax.set_ylabel("Complexity")
-    ax.set_xlabel("Sprint")
-    plt.xticks(rotation=45, ha="right")
-    plt.legend(bbox_to_anchor=(1.02, 1), ncol=2)
-    plt.tight_layout()
-    out = output_dir / "05-developer-contribution.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
-    return str(out) if validate_png_has_content(out) else None
-
-
-def report_complexity_per_dev_vs_pr_count(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
-    """Report 6: Complexity per Dev vs PR Count - scatter."""
     df = df.copy()
     dev_col = "developer" if "developer" in df.columns else "author"
     df["developer"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").astype(str)
+    df["team"] = df["developer"].map(lambda d: mapping.get(d, "") if d else "")
+    df = df[df["team"] != ""]
     df = df[df["developer"] != ""]
     if df.empty:
         return None
-    agg = df.groupby("developer").agg(pr_count=("pr_url", "count"), total_complexity=("complexity", "sum"))
-    if not has_plottable_agg(agg):
-        return None
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.scatter(agg["pr_count"], agg["total_complexity"], alpha=0.7)
-    for idx, row in agg.iterrows():
-        ax.annotate(idx, (row["pr_count"], row["total_complexity"]), fontsize=8, alpha=0.8)
-    ax.set_title("Complexity per Developer vs PR Count")
-    ax.set_xlabel("PR Count")
-    ax.set_ylabel("Total Complexity")
-    plt.tight_layout()
-    out = output_dir / "06-complexity-per-dev-vs-pr-count.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
-    return str(out) if validate_png_has_content(out) else None
+    generated = []
+    for team in df["team"].unique():
+        tdf = df[df["team"] == team]
+        agg = tdf.groupby("developer").agg(
+            pr_count=("pr_url", "count"), total_complexity=("complexity", "sum")
+        )
+        if not has_plottable_agg(agg):
+            continue
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.scatter(agg["pr_count"], agg["total_complexity"], alpha=0.7)
+        for idx, row in agg.iterrows():
+            ax.annotate(idx, (row["pr_count"], row["total_complexity"]), fontsize=8, alpha=0.8)
+        ax.set_title(
+            f"Complexity per Developer vs PR Count — {team}\n"
+            "What: Output vs effort per dev. When: 1:1s. How: Top-right = high output + high complexity."
+        )
+        ax.set_xlabel("PR Count")
+        ax.set_ylabel("Total Complexity")
+        fig.tight_layout()
+        safe_team = "".join(c if c.isalnum() or c in "-_" else "_" for c in team)
+        out = output_dir / f"06-complexity-per-dev-vs-pr-count-{safe_team}.png"
+        fig.savefig(out, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        if validate_png_has_content(out):
+            generated.append(str(out))
+    return generated if generated else None
 
 
 def report_complexity_vs_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
-    """Report 14: Complexity vs Cycle Time - scatter."""
+    """Report 14: Complexity vs Cycle Time - scatter (known teams only)."""
     if "created_at" not in df.columns or "merged_at" not in df.columns:
         return None
     df = df.copy()
+    if "team" in df.columns:
+        df["team"] = df["team"].fillna("").replace("", "Unknown")
+        df = df[df["team"] != "Unknown"]
+    else:
+        mapping = load_team_mapping()
+        if mapping:
+            dev_col = "developer" if "developer" in df.columns else "author"
+            df["_team"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").map(
+                lambda d: mapping.get(d, "") if d else ""
+            )
+            df = df[df["_team"] != ""]
     df = df.dropna(subset=["created_at", "merged_at"])
     df["cycle_hours"] = (pd.to_datetime(df["merged_at"]) - pd.to_datetime(df["created_at"])).dt.total_seconds() / 3600
     df = df[df["cycle_hours"] >= 0]
@@ -126,13 +173,16 @@ def report_complexity_vs_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optio
         return None
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.scatter(df["complexity"], df["cycle_hours"], alpha=0.6)
-    ax.set_title("Complexity vs Cycle Time (hours)")
+    ax.set_title(
+        "Complexity vs Cycle Time (hours)\n"
+        "What: PR complexity vs time to merge. When: Process review. How: High complexity + long cycle = bottlenecks."
+    )
     ax.set_xlabel("Complexity")
     ax.set_ylabel("Cycle Time (hours)")
-    plt.tight_layout()
+    fig.tight_layout()
     out = output_dir / "14-complexity-vs-cycle-time.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
 
 
@@ -140,6 +190,9 @@ def report_complexity_per_team_per_dev(df: pd.DataFrame, output_dir: Path) -> Op
     """Report 17: Complexity per Team per Developer - normalized."""
     df = df.copy()
     df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
+    df = df[df["team"] != "Unknown"]
+    if df.empty:
+        return None
     dev_col = "developer" if "developer" in df.columns else "author"
     df["_dev"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").astype(str)
     team_total = df.groupby("team")["complexity"].sum()
@@ -150,14 +203,17 @@ def report_complexity_per_team_per_dev(df: pd.DataFrame, output_dir: Path) -> Op
         return None
     fig, ax = plt.subplots(figsize=(10, 6))
     normalized.plot(kind="bar", ax=ax, color="steelblue")
-    ax.set_title("Complexity per Team per Developer (Normalized)")
+    ax.set_title(
+        "Complexity per Team per Developer (Normalized)\n"
+        "What: Team output divided by headcount. When: Fair comparison. How: Higher = more output per person."
+    )
     ax.set_ylabel("Complexity / Headcount")
     ax.set_xlabel("Team")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
     out = output_dir / "17-complexity-per-team-per-dev.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
 
 
@@ -165,17 +221,23 @@ def report_team_gini(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
     """Report 12: Team Complexity Gini Coefficient."""
     df = df.copy()
     df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
+    df = df[df["team"] != "Unknown"]
+    if df.empty:
+        return None
     ginis = df.groupby("team")["complexity"].apply(_gini).sort_values(ascending=False)
     if not has_plottable_series(ginis):
         return None
     fig, ax = plt.subplots(figsize=(10, 6))
     ginis.plot(kind="bar", ax=ax, color="purple", alpha=0.8)
-    ax.set_title("Team Complexity Gini Coefficient (Concentration)")
+    ax.set_title(
+        "Team Complexity Gini Coefficient (Concentration)\n"
+        "What: How concentrated is complexity within each team. When: Bus factor. How: High Gini = few people carry load."
+    )
     ax.set_ylabel("Gini")
     ax.set_xlabel("Team")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
     out = output_dir / "12-team-gini.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return str(out) if validate_png_has_content(out) else None
