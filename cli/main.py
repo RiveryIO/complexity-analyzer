@@ -19,6 +19,7 @@ from .batch import (  # noqa: E402
     load_pr_urls_from_file,
 )
 from .config import (  # noqa: E402
+    get_anthropic_api_key,
     get_github_token,
     get_github_tokens,
     get_openai_api_key,
@@ -72,6 +73,8 @@ def analyze_pr_to_dict(
     provider: str = "openai",
     bedrock_model: Optional[str] = None,
     bedrock_region: Optional[str] = None,
+    anthropic_key: Optional[str] = None,
+    anthropic_model: Optional[str] = None,
 ) -> dict:
     """
     Analyze a GitHub PR and return result as dictionary.
@@ -91,9 +94,11 @@ def analyze_pr_to_dict(
         sleep_seconds: Sleep between GitHub API calls
         progress_callback: Optional callback for progress messages (e.g., rate limit warnings)
         token_rotator: Optional TokenRotator for automatic token rotation on rate limits
-        provider: LLM provider ("openai" or "bedrock")
+        provider: LLM provider ("openai", "anthropic", or "bedrock")
         bedrock_model: Bedrock model ID (overrides env when provider is bedrock)
         bedrock_region: Bedrock region (overrides env when provider is bedrock)
+        anthropic_key: Anthropic API key (uses ANTHROPIC_API_KEY env when provider is anthropic)
+        anthropic_model: Anthropic model name (overrides env when provider is anthropic)
 
     Returns:
         Dict with keys: score, explanation, provider, model, tokens, timestamp,
@@ -145,9 +150,11 @@ def analyze_pr_to_dict(
     llm_provider = create_llm_provider(
         provider,
         openai_key=openai_key,
+        anthropic_key=anthropic_key,
         model=model,
         bedrock_model=bedrock_model,
         bedrock_region=bedrock_region,
+        anthropic_model=anthropic_model,
         timeout=timeout,
     )
     result = llm_provider.analyze_complexity(
@@ -192,6 +199,7 @@ def _analyze_pr_impl(
     provider: str = "openai",
     bedrock_model: Optional[str] = None,
     bedrock_region: Optional[str] = None,
+    anthropic_model: Optional[str] = None,
 ):
     """
     Analyze a GitHub PR and compute complexity score.
@@ -223,6 +231,14 @@ def _analyze_pr_impl(
                 "Set it with: export OPENAI_API_KEY='your-key' or pass --openai-api-key", err=True
             )
             raise typer.Exit(1)
+        if provider == "anthropic":
+            anthropic_key = get_anthropic_api_key()
+            if not anthropic_key:
+                typer.echo(
+                    "Error: ANTHROPIC_API_KEY or ANTROPIC_API_KEY environment variable is required for anthropic provider",
+                    err=True,
+                )
+                raise typer.Exit(1)
         if provider == "bedrock":
             typer.echo(
                 "Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set (e.g. bedrock_env).",
@@ -285,6 +301,8 @@ def _analyze_pr_impl(
                 provider=provider,
                 bedrock_model=bedrock_model,
                 bedrock_region=bedrock_region,
+                anthropic_key=get_anthropic_api_key() if provider == "anthropic" else None,
+                anthropic_model=anthropic_model,
             )
             typer.echo(f"PR: {output['title']}", err=True)
             typer.echo("Processing diff...", err=True)
@@ -429,13 +447,16 @@ def analyze_pr(
     github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     provider: str = typer.Option(
-        "openai", "--provider", help="LLM provider: openai or bedrock"
+        "openai", "--provider", help="LLM provider: openai, anthropic, or bedrock"
     ),
     bedrock_model: Optional[str] = typer.Option(
         None, "--bedrock-model", help="Bedrock model ID (e.g. anthropic.claude-sonnet-4-5-20250929-v1:0)"
     ),
     bedrock_region: Optional[str] = typer.Option(
         None, "--bedrock-region", help="AWS region for Bedrock (default: AWS_REGION or us-east-1)"
+    ),
+    anthropic_model: Optional[str] = typer.Option(
+        None, "--anthropic-model", help="Anthropic model (e.g. claude-sonnet-4-5-20250929)"
     ),
 ):
     """Analyze a GitHub PR and compute complexity score."""
@@ -468,6 +489,7 @@ def analyze_pr(
         provider=provider,
         bedrock_model=bedrock_model,
         bedrock_region=bedrock_region,
+        anthropic_model=anthropic_model,
     )
 
 
@@ -529,13 +551,16 @@ def batch_analyze(
         "Can also be set via GH_TOKENS or GITHUB_TOKENS environment variables.",
     ),
     provider: str = typer.Option(
-        "openai", "--provider", help="LLM provider: openai or bedrock"
+        "openai", "--provider", help="LLM provider: openai, anthropic, or bedrock"
     ),
     bedrock_model: Optional[str] = typer.Option(
         None, "--bedrock-model", help="Bedrock model ID"
     ),
     bedrock_region: Optional[str] = typer.Option(
         None, "--bedrock-region", help="AWS region for Bedrock"
+    ),
+    anthropic_model: Optional[str] = typer.Option(
+        None, "--anthropic-model", help="Anthropic model (e.g. claude-sonnet-4-5-20250929)"
     ),
 ):
     """
@@ -584,6 +609,9 @@ def batch_analyze(
         if provider == "openai" and not openai_key:
             typer.echo("Error: OPENAI_API_KEY environment variable is required for openai provider", err=True)
             typer.echo("Set it with: export OPENAI_API_KEY='your-key'", err=True)
+            raise typer.Exit(1)
+        if provider == "anthropic" and not get_anthropic_api_key():
+            typer.echo("Error: ANTHROPIC_API_KEY or ANTROPIC_API_KEY is required for anthropic provider", err=True)
             raise typer.Exit(1)
         if provider == "bedrock":
             typer.echo("Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set.", err=True)
@@ -685,6 +713,8 @@ def batch_analyze(
                 provider=provider,
                 bedrock_model=bedrock_model,
                 bedrock_region=bedrock_region,
+                anthropic_key=get_anthropic_api_key() if provider == "anthropic" else None,
+                anthropic_model=anthropic_model,
             )
 
         # Validate workers
@@ -803,13 +833,16 @@ def label_pr(
     openai_api_key: Optional[str] = typer.Option(None, "--openai-api-key", help="OpenAI API key"),
     github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
     provider: str = typer.Option(
-        "openai", "--provider", help="LLM provider: openai or bedrock"
+        "openai", "--provider", help="LLM provider: openai, anthropic, or bedrock"
     ),
     bedrock_model: Optional[str] = typer.Option(
         None, "--bedrock-model", help="Bedrock model ID"
     ),
     bedrock_region: Optional[str] = typer.Option(
         None, "--bedrock-region", help="AWS region for Bedrock"
+    ),
+    anthropic_model: Optional[str] = typer.Option(
+        None, "--anthropic-model", help="Anthropic model (e.g. claude-sonnet-4-5-20250929)"
     ),
 ):
     """
@@ -855,6 +888,12 @@ def label_pr(
                 "Set it with: export OPENAI_API_KEY='your-key' or pass --openai-api-key", err=True
             )
             raise typer.Exit(1)
+        if provider == "anthropic" and not get_anthropic_api_key():
+            typer.echo(
+                "Error: ANTHROPIC_API_KEY or ANTROPIC_API_KEY is required for anthropic provider",
+                err=True,
+            )
+            raise typer.Exit(1)
         if provider == "bedrock":
             typer.echo(
                 "Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set.", err=True
@@ -888,6 +927,8 @@ def label_pr(
                 provider=provider,
                 bedrock_model=bedrock_model,
                 bedrock_region=bedrock_region,
+                anthropic_key=get_anthropic_api_key() if provider == "anthropic" else None,
+                anthropic_model=anthropic_model,
             )
         except GitHubAPIError as e:
             if e.status_code == 404:

@@ -144,20 +144,24 @@ def create_llm_provider(
     provider: str,
     *,
     openai_key: Optional[str] = None,
+    anthropic_key: Optional[str] = None,
     model: str = DEFAULT_MODEL,
     bedrock_model: Optional[str] = None,
     bedrock_region: Optional[str] = None,
+    anthropic_model: Optional[str] = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> LLMProvider:
     """
     Create an LLM provider based on the specified type.
 
     Args:
-        provider: "openai" or "bedrock"
+        provider: "openai", "anthropic", or "bedrock"
         openai_key: OpenAI API key (required for openai provider)
-        model: OpenAI model name
+        anthropic_key: Anthropic API key (required for anthropic provider)
+        model: Model name (used for openai; anthropic uses anthropic_model or DEFAULT_ANTHROPIC_MODEL)
         bedrock_model: Bedrock model ID (overrides env/config)
         bedrock_region: Bedrock region (overrides env/config)
+        anthropic_model: Anthropic model name (overrides env/config)
         timeout: Request timeout in seconds
 
     Returns:
@@ -176,8 +180,21 @@ def create_llm_provider(
         if bedrock_model:
             model_id = bedrock_model
         return BedrockProvider(region=region, model_id=model_id, timeout=timeout)
+    if provider == "anthropic":
+        from .config import get_anthropic_api_key
+        from .constants import DEFAULT_ANTHROPIC_MODEL
+        from .llm_anthropic import AnthropicProvider
+
+        key = anthropic_key or get_anthropic_api_key()
+        if not key:
+            raise ValueError(
+                "Anthropic API key is required for anthropic provider. "
+                "Set ANTHROPIC_API_KEY or ANTROPIC_API_KEY in .env"
+            )
+        model_id = anthropic_model or DEFAULT_ANTHROPIC_MODEL
+        return AnthropicProvider(key, model=model_id, timeout=timeout)
     if provider == "openai":
         if not openai_key:
             raise ValueError("OpenAI API key is required for openai provider")
         return OpenAIProvider(openai_key, model=model, timeout=timeout)
-    raise ValueError(f"Unknown provider: {provider}. Use 'openai' or 'bedrock'.")
+    raise ValueError(f"Unknown provider: {provider}. Use 'openai', 'anthropic', or 'bedrock'.")

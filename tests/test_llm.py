@@ -220,6 +220,17 @@ class TestCreateLLMProvider:
         assert provider.model_name == "anthropic.claude-3-haiku-v1"
         assert provider._region == "eu-west-1"
 
+    def test_create_anthropic_provider(self):
+        """Test creating Anthropic provider."""
+        provider = create_llm_provider("anthropic", anthropic_key="test-key")
+        assert provider.provider_name == "anthropic"
+        assert "claude" in provider.model_name.lower()
+
+    def test_create_anthropic_provider_requires_key(self):
+        """Test that Anthropic provider requires API key."""
+        with pytest.raises(ValueError, match="Anthropic API key is required"):
+            create_llm_provider("anthropic")
+
     def test_unknown_provider_raises(self):
         """Test that unknown provider raises ValueError."""
         with pytest.raises(ValueError, match="Unknown provider"):

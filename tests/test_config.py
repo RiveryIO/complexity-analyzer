@@ -8,6 +8,7 @@ from cli.config import (
     validate_pr_number,
     get_github_tokens,
     get_bedrock_config,
+    get_anthropic_api_key,
 )
 from cli.config_types import AnalysisConfig, BatchConfig, OutputConfig
 
@@ -134,6 +135,33 @@ class TestGetBedrockConfig:
         """Test that BEDROCK_MODEL_ID is used."""
         _, model_id = get_bedrock_config()
         assert model_id == "anthropic.claude-3-haiku-v1"
+
+
+# get_anthropic_api_key tests
+
+
+class TestGetAnthropicApiKey:
+    """Tests for get_anthropic_api_key function."""
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_no_key_returns_none(self):
+        """Test that None is returned when no key is set."""
+        assert get_anthropic_api_key() is None
+
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True)
+    def test_anthropic_api_key(self):
+        """Test getting key from ANTHROPIC_API_KEY."""
+        assert get_anthropic_api_key() == "sk-ant-test"
+
+    @patch.dict(os.environ, {"ANTROPIC_API_KEY": "sk-ant-typo"}, clear=True)
+    def test_antropic_typo_fallback(self):
+        """Test that ANTROPIC_API_KEY (typo) is supported."""
+        assert get_anthropic_api_key() == "sk-ant-typo"
+
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "correct", "ANTROPIC_API_KEY": "typo"}, clear=True)
+    def test_anthropic_takes_precedence_over_typo(self):
+        """Test that ANTHROPIC_API_KEY takes precedence over ANTROPIC_API_KEY."""
+        assert get_anthropic_api_key() == "correct"
 
 
 # AnalysisConfig validation tests

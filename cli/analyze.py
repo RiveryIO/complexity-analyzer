@@ -67,6 +67,8 @@ def analyze_single_pr(
     """
     if config.provider == "openai" and not config.openai_key:
         raise ValueError("OpenAI API key is required for openai provider")
+    if config.provider == "anthropic" and not config.anthropic_key:
+        raise ValueError("Anthropic API key is required for anthropic provider")
 
     # Parse PR URL
     owner, repo, pr = parse_pr_url(pr_url)
@@ -113,9 +115,11 @@ def analyze_single_pr(
     llm_provider = create_llm_provider(
         config.provider,
         openai_key=config.openai_key,
+        anthropic_key=config.anthropic_key,
         model=config.model,
         bedrock_model=config.bedrock_model,
         bedrock_region=config.bedrock_region,
+        anthropic_model=config.anthropic_model,
         timeout=config.timeout,
     )
     result = llm_provider.analyze_complexity(
