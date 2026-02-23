@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict
 
 
+class LLMError(Exception):
+    """LLM provider error."""
+
+
 class LLMProvider(ABC):
     """
     Abstract base class for LLM providers.

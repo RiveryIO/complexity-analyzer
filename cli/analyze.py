@@ -9,7 +9,7 @@ from .config import validate_owner_repo, validate_pr_number
 from .config_types import AnalysisConfig
 from .github import fetch_pr, fetch_pr_with_rotation
 from .io_safety import read_text_file
-from .llm import OpenAIProvider
+from .llm import create_llm_provider
 from .preprocess import make_prompt_input, process_diff
 from .utils import parse_pr_url
 
@@ -65,8 +65,10 @@ def analyze_single_pr(
         LLMError: If LLM call fails
         InvalidResponseError: If LLM response is invalid
     """
-    if not config.openai_key:
-        raise ValueError("OpenAI API key is required")
+    if config.provider == "openai" and not config.openai_key:
+        raise ValueError("OpenAI API key is required for openai provider")
+    if config.provider == "anthropic" and not config.anthropic_key:
+        raise ValueError("Anthropic API key is required for anthropic provider")
 
     # Parse PR URL
     owner, repo, pr = parse_pr_url(pr_url)
@@ -110,8 +112,17 @@ def analyze_single_pr(
     diff_for_prompt = make_prompt_input(pr_url, title, stats, selected_files, truncated_diff)
 
     # Call LLM
-    provider = OpenAIProvider(config.openai_key, model=config.model, timeout=config.timeout)
-    result = provider.analyze_complexity(
+    llm_provider = create_llm_provider(
+        config.provider,
+        openai_key=config.openai_key,
+        anthropic_key=config.anthropic_key,
+        model=config.model,
+        bedrock_model=config.bedrock_model,
+        bedrock_region=config.bedrock_region,
+        anthropic_model=config.anthropic_model,
+        timeout=config.timeout,
+    )
+    result = llm_provider.analyze_complexity(
         prompt=prompt_text,
         diff_excerpt=diff_for_prompt,
         stats_json=json.dumps(stats),
@@ -122,8 +133,8 @@ def analyze_single_pr(
     return {
         "score": result["complexity"],
         "explanation": result["explanation"],
-        "provider": result.get("provider", "openai"),
-        "model": result.get("model", config.model),
+        "provider": result.get("provider", config.provider),
+        "model": result.get("model", llm_provider.model_name),
         "tokens": result.get("tokens"),
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "repo": f"{owner}/{repo}",

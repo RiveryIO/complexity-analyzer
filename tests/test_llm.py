@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from cli.llm import OpenAIProvider, LLMError
+from cli.llm import OpenAIProvider, LLMError, create_llm_provider
 from cli.llm_base import LLMProvider
 
 
@@ -186,6 +186,55 @@ class TestOpenAIProviderAnalyzeComplexity:
 
         assert result["complexity"] == 7
         assert result["tokens"] is None
+
+
+class TestCreateLLMProvider:
+    """Tests for create_llm_provider factory."""
+
+    def test_create_openai_provider(self):
+        """Test creating OpenAI provider."""
+        provider = create_llm_provider("openai", openai_key="test-key")
+        assert provider.provider_name == "openai"
+        assert provider.model_name == "gpt-5.2"
+
+    def test_create_openai_provider_requires_key(self):
+        """Test that OpenAI provider requires API key."""
+        with pytest.raises(ValueError, match="OpenAI API key is required"):
+            create_llm_provider("openai")
+
+    @patch("cli.llm_bedrock.boto3.client")
+    def test_create_bedrock_provider(self, mock_boto_client):
+        """Test creating Bedrock provider."""
+        provider = create_llm_provider("bedrock")
+        assert provider.provider_name == "bedrock"
+        assert "claude" in provider.model_name.lower()
+
+    @patch("cli.llm_bedrock.boto3.client")
+    def test_create_bedrock_provider_with_overrides(self, mock_boto_client):
+        """Test that bedrock_model and bedrock_region overrides work."""
+        provider = create_llm_provider(
+            "bedrock",
+            bedrock_model="anthropic.claude-3-haiku-v1",
+            bedrock_region="eu-west-1",
+        )
+        assert provider.model_name == "anthropic.claude-3-haiku-v1"
+        assert provider._region == "eu-west-1"
+
+    def test_create_anthropic_provider(self):
+        """Test creating Anthropic provider."""
+        provider = create_llm_provider("anthropic", anthropic_key="test-key")
+        assert provider.provider_name == "anthropic"
+        assert "claude" in provider.model_name.lower()
+
+    def test_create_anthropic_provider_requires_key(self):
+        """Test that Anthropic provider requires API key."""
+        with pytest.raises(ValueError, match="Anthropic API key is required"):
+            create_llm_provider("anthropic")
+
+    def test_unknown_provider_raises(self):
+        """Test that unknown provider raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown provider"):
+            create_llm_provider("unknown")
 
 
 class TestLLMError:

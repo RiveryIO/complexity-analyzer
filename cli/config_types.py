@@ -33,6 +33,13 @@ class AnalysisConfig:
     # Credentials (optional - can be provided at runtime)
     github_token: Optional[str] = None
     openai_key: Optional[str] = None
+    anthropic_key: Optional[str] = None
+
+    # Provider selection
+    provider: Literal["openai", "anthropic", "bedrock"] = "openai"
+    bedrock_model: Optional[str] = None
+    bedrock_region: Optional[str] = None
+    anthropic_model: Optional[str] = None
 
     # Token rotation (optional)
     token_rotator: Optional["TokenRotator"] = None

@@ -92,11 +92,43 @@ complexity-cli analyze-pr "https://github.com/owner/repo/pull/123"
 - `--hunks-per-file`: Maximum hunks per file (default: 2)
 - `--sleep-seconds`: Sleep between GitHub API calls (default: 0.7)
 - `--dry-run`: Fetch PR but don't call LLM
+- `--provider`: LLM provider: `openai` (default), `anthropic`, or `bedrock`
+- `--anthropic-model`: Anthropic model (e.g. `claude-sonnet-4-5-20250929`)
+- `--bedrock-model`: Bedrock model ID (e.g. `anthropic.claude-sonnet-4-5-20250929-v1:0`)
+- `--bedrock-region`: AWS region for Bedrock (default: `AWS_REGION` or `us-east-1`)
 
 ### Environment Variables
 
-- `OPENAI_API_KEY` (required): OpenAI API key
+- `OPENAI_API_KEY` (required for `--provider openai`): OpenAI API key
+- `ANTHROPIC_API_KEY` (required for `--provider anthropic`): Anthropic API key
 - `GH_TOKEN` or `GITHUB_TOKEN` (optional): GitHub API token for private repos or higher rate limits
+
+### Anthropic Provider
+
+Use Claude directly via Anthropic's API:
+
+```bash
+# Set in .env: ANTHROPIC_API_KEY or ANTROPIC_API_KEY (typo also works)
+complexity-cli analyze-pr "https://github.com/owner/repo/pull/123" --provider anthropic
+```
+
+### AWS Bedrock Provider
+
+Use Claude on AWS Bedrock instead of OpenAI:
+
+```bash
+# Set AWS credentials (profile + region)
+export AWS_PROFILE=your-bedrock-profile
+export AWS_REGION=us-east-1
+
+# Or use BEDROCK_MODEL_ID to override default (Claude Sonnet 4.5)
+export BEDROCK_MODEL_ID=anthropic.claude-sonnet-4-5-20250929-v1:0
+
+# Analyze with Bedrock
+complexity-cli analyze-pr "https://github.com/owner/repo/pull/123" --provider bedrock
+```
+
+Options: `--provider bedrock`, `--bedrock-model`, `--bedrock-region`
 
 ### Examples
 

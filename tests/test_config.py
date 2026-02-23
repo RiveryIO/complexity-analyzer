@@ -3,7 +3,13 @@
 import os
 import pytest
 from unittest.mock import patch
-from cli.config import validate_owner_repo, validate_pr_number, get_github_tokens
+from cli.config import (
+    validate_owner_repo,
+    validate_pr_number,
+    get_github_tokens,
+    get_bedrock_config,
+    get_anthropic_api_key,
+)
 from cli.config_types import AnalysisConfig, BatchConfig, OutputConfig
 
 
@@ -98,6 +104,54 @@ class TestGetGitHubTokens:
         tokens = get_github_tokens()
         assert tokens == ["fallback"]
 
+
+# get_bedrock_config tests
+
+
+class TestGetBedrockConfig:
+    """Tests for get_bedrock_config function."""
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_default_region_and_model(self):
+        """Test default region and model when no env vars set."""
+        region, model_id = get_bedrock_config()
+        assert region == "us-east-1"
+        assert "claude-sonnet-4-5" in model_id
+
+    @patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=True)
+    def test_uses_aws_region(self):
+        """Test that AWS_REGION is used."""
+        region, _ = get_bedrock_config()
+        assert region == "us-west-2"
+
+    @patch.dict(os.environ, {"BEDROCK_REGION": "eu-west-1"}, clear=True)
+    def test_bedrock_region_takes_precedence(self):
+        """Test that BEDROCK_REGION takes precedence over AWS_REGION."""
+        region, _ = get_bedrock_config()
+        assert region == "eu-west-1"
+
+    @patch.dict(os.environ, {"BEDROCK_MODEL_ID": "anthropic.claude-3-haiku-v1"}, clear=True)
+    def test_bedrock_model_id(self):
+        """Test that BEDROCK_MODEL_ID is used."""
+        _, model_id = get_bedrock_config()
+        assert model_id == "anthropic.claude-3-haiku-v1"
+
+
+# get_anthropic_api_key tests
+
+
+class TestGetAnthropicApiKey:
+    """Tests for get_anthropic_api_key function."""
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_no_key_returns_none(self):
+        """Test that None is returned when no key is set."""
+        assert get_anthropic_api_key() is None
+
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True)
+    def test_anthropic_api_key(self):
+        """Test getting key from ANTHROPIC_API_KEY."""
+        assert get_anthropic_api_key() == "sk-ant-test"
 
 # AnalysisConfig validation tests
 
