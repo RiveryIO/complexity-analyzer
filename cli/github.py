@@ -884,6 +884,48 @@ def remove_pr_label(
         raise RuntimeError(f"Failed to remove PR label: {e}")
 
 
+def add_pr_comment(
+    owner: str,
+    repo: str,
+    pr: int,
+    body: str,
+    token: str,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> None:
+    """
+    Add a comment to a PR.
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        body: Comment body (Markdown supported)
+        token: GitHub token (required - must have write access)
+        timeout: Request timeout in seconds
+    """
+    validate_owner_repo(owner, repo)
+    validate_pr_number(pr)
+
+    if not token:
+        raise ValueError("GitHub token is required to add comments")
+
+    headers = build_github_headers(token)
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr}/comments"
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(url, headers=headers, json={"body": body})
+            response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise GitHubAPIError(
+            e.response.status_code,
+            e.response.text[:500],
+            url,
+        )
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to add PR comment: {e}")
+
+
 def update_complexity_label(
     owner: str,
     repo: str,
@@ -892,11 +934,13 @@ def update_complexity_label(
     token: str,
     label_prefix: str = "complexity:",
     timeout: float = DEFAULT_TIMEOUT,
+    explanation: Optional[str] = None,
 ) -> str:
     """
     Update the complexity label on a PR.
 
     Removes any existing complexity labels and adds a new one with the given score.
+    If explanation is provided, also posts it as a comment on the PR.
 
     Args:
         owner: Repository owner
@@ -906,6 +950,7 @@ def update_complexity_label(
         token: GitHub token (required - must have write access)
         label_prefix: Prefix for complexity labels (default: "complexity:")
         timeout: Request timeout in seconds
+        explanation: Optional explanation text to post as a PR comment
 
     Returns:
         The label name that was applied
@@ -928,7 +973,51 @@ def update_complexity_label(
     new_label = f"{label_prefix}{complexity}"
     add_pr_label(owner, repo, pr, new_label, token, timeout)
 
+    # Post explanation as comment if provided
+    if explanation and explanation.strip():
+        comment_body = f"## Complexity Analysis\n\n**Score:** {complexity}/10\n\n{explanation.strip()}"
+        add_pr_comment(owner, repo, pr, comment_body, token, timeout)
+
     return new_label
+
+
+def get_issue_details(
+    owner: str,
+    repo: str,
+    pr: int,
+    token: Optional[str] = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> Dict[str, Any]:
+    """
+    Fetch issue/PR details (user, labels) in one API call.
+    Used for exporting existing labels without re-analyzing.
+
+    Returns:
+        Dict with 'user' (login) and 'labels' (list of label names)
+    """
+    validate_owner_repo(owner, repo)
+    validate_pr_number(pr)
+
+    headers = build_github_headers(token)
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr}"
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return {
+                "user": (data.get("user") or {}).get("login", ""),
+                "labels": [lb["name"] for lb in (data.get("labels") or [])],
+            }
+    except httpx.HTTPStatusError as e:
+        raise GitHubAPIError(
+            e.response.status_code,
+            e.response.text[:500],
+            url,
+        )
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to fetch issue details: {e}")
 
 
 def has_complexity_label(
@@ -964,6 +1053,84 @@ def has_complexity_label(
 
 
 REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def list_user_repos(
+    token: str,
+    affiliation: str = "owner,collaborator,organization_member",
+    timeout: float = DEFAULT_TIMEOUT,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> List[str]:
+    """
+    List all repositories the authenticated user has access to.
+
+    Uses GET /user/repos with pagination. Requires a GitHub token.
+
+    Args:
+        token: GitHub token (required)
+        affiliation: Comma-separated list of affiliations (default: owner,collaborator,organization_member)
+        timeout: Request timeout in seconds
+        progress_callback: Optional callback for progress messages
+
+    Returns:
+        List of "owner/repo" strings
+
+    Raises:
+        ValueError: If token is empty
+        GitHubAPIError: If API call fails
+    """
+    if not token:
+        raise ValueError("GitHub token is required to list user repos")
+
+    headers = build_github_headers(token)
+    url = "https://api.github.com/user/repos"
+    all_repos: List[str] = []
+    page = 1
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            while True:
+                if progress_callback and page > 1:
+                    progress_callback(f"Fetching repos page {page}...")
+
+                response = client.get(
+                    url,
+                    headers=headers,
+                    params={
+                        "per_page": GITHUB_PER_PAGE,
+                        "page": page,
+                        "affiliation": affiliation,
+                        "sort": "updated",
+                        "direction": "desc",
+                    },
+                )
+                response.raise_for_status()
+                repos = response.json()
+
+                if not repos:
+                    break
+
+                for repo in repos:
+                    owner = (repo.get("owner") or {}).get("login", "")
+                    name = repo.get("name", "")
+                    if owner and name:
+                        all_repos.append(f"{owner}/{name}")
+
+                if len(repos) < GITHUB_PER_PAGE:
+                    break
+
+                page += 1
+                time.sleep(0.3)
+
+        return all_repos
+    except httpx.HTTPStatusError as e:
+        raise GitHubAPIError(
+            e.response.status_code,
+            e.response.text[:500],
+            url,
+        )
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to list user repos: {e}")
 
 
 def _search_prs_with_query(
@@ -1252,11 +1419,12 @@ def search_closed_prs_by_repos(
     max_retries: int = 5,
     progress_callback: Optional[Callable[[str], None]] = None,
     client: Optional[httpx.Client] = None,
+    merged_only: bool = False,
 ) -> List[str]:
     """
     Search for closed PRs in a list of repositories within a date range.
 
-    Uses GitHub Search API to find PRs closed between since and until dates.
+    Uses GitHub Search API to find PRs closed/merged between since and until dates.
     Searches each repo separately and merges results.
 
     Args:
@@ -1270,6 +1438,7 @@ def search_closed_prs_by_repos(
         max_retries: Maximum number of retries for rate limit errors
         progress_callback: Optional callback for progress messages
         client: Optional httpx.Client to reuse connections
+        merged_only: If True, search for merged PRs only (uses is:merged, merged: date range)
 
     Returns:
         List of PR URLs (deduplicated)
@@ -1295,7 +1464,10 @@ def search_closed_prs_by_repos(
 
     try:
         for i, repo in enumerate(repo_list):
-            query = f"repo:{repo} is:pr is:closed closed:{since_str}..{until_str}"
+            if merged_only:
+                query = f"repo:{repo} is:pr is:merged merged:{since_str}..{until_str}"
+            else:
+                query = f"repo:{repo} is:pr is:closed closed:{since_str}..{until_str}"
             if progress_callback:
                 progress_callback(f"Searching {repo}...")
             urls = _search_prs_with_query(

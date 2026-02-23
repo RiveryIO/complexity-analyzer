@@ -16,6 +16,7 @@ from .constants import DEFAULT_SLEEP_SECONDS, DEFAULT_TIMEOUT
 from .github import (
     GitHubAPIError,
     has_complexity_label,
+    list_user_repos,
     search_closed_prs,
     search_closed_prs_by_repos,
     update_complexity_label,
@@ -347,6 +348,100 @@ def generate_pr_list_from_repos_file(
                 on_pr_found=write_pr_to_cache if cache_file else None,
                 progress_callback=progress_msg,
                 client=client,
+                merged_only=False,
+            )
+            typer.echo(f"Found {len(urls)} PRs", err=True)
+            return urls
+    except GitHubAPIError as e:
+        typer.echo(f"Error fetching PRs: {e}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Unexpected error fetching PRs: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        if cache_file_handle:
+            try:
+                cache_file_handle.close()
+                if cache_file:
+                    typer.echo(f"Saved PR list to cache: {cache_file}", err=True)
+            except Exception as e:
+                typer.echo(f"Warning: Failed to close cache file: {e}", err=True)
+
+
+def generate_pr_list_from_all_repos(
+    since: datetime,
+    until: datetime,
+    cache_file: Optional[Path],
+    github_token: str,
+    sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
+    merged_only: bool = True,
+) -> List[str]:
+    """
+    Generate PR list from all repos the authenticated user has access to.
+
+    Dynamically fetches repos via GitHub API, then searches for merged PRs
+    in the date range. Requires a GitHub token.
+
+    Args:
+        since: Start date
+        until: End date
+        cache_file: Optional path to cache file
+        github_token: GitHub token (required)
+        sleep_seconds: Sleep between API calls
+        merged_only: If True, search for merged PRs only (default: True)
+
+    Returns:
+        List of PR URLs
+    """
+    if cache_file and cache_file.exists():
+        try:
+            typer.echo(f"Loading PR list from cache: {cache_file}", err=True)
+            urls = load_pr_urls_from_file(cache_file)
+            typer.echo(f"Loaded {len(urls)} PRs from cache", err=True)
+            return urls
+        except Exception as e:
+            typer.echo(f"Warning: Failed to load cache, will fetch from GitHub: {e}", err=True)
+
+    typer.echo("Fetching all repos for authenticated user...", err=True)
+    repos = list_user_repos(
+        token=github_token,
+        progress_callback=lambda msg: typer.echo(msg, err=True),
+    )
+    typer.echo(f"Found {len(repos)} repos. Searching for {'merged' if merged_only else 'closed'} PRs from {since.date()} to {until.date()}...", err=True)
+
+    cache_file_handle = None
+    try:
+        if cache_file:
+            try:
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                cache_file_handle = cache_file.open("w", encoding="utf-8")
+                typer.echo(f"Writing PRs to cache file: {cache_file}", err=True)
+            except Exception as e:
+                typer.echo(f"Warning: Failed to open cache file for writing: {e}", err=True)
+                cache_file = None
+
+        def write_pr_to_cache(pr_url: str) -> None:
+            if cache_file_handle:
+                try:
+                    cache_file_handle.write(f"{pr_url}\n")
+                    cache_file_handle.flush()
+                except Exception as e:
+                    typer.echo(f"Warning: Failed to write to cache: {e}", err=True)
+
+        def progress_msg(msg: str) -> None:
+            typer.echo(msg, err=True)
+
+        with httpx.Client(timeout=60.0) as client:
+            urls = search_closed_prs_by_repos(
+                repos=repos,
+                since=since,
+                until=until,
+                token=github_token,
+                sleep_s=sleep_seconds,
+                on_pr_found=write_pr_to_cache if cache_file else None,
+                progress_callback=progress_msg,
+                client=client,
+                merged_only=merged_only,
             )
             typer.echo(f"Found {len(urls)} PRs", err=True)
             return urls
@@ -842,12 +937,19 @@ def run_batch_analysis_with_labels(
 
             label_applied = None
 
-            # Apply label if requested
+            # Apply label if requested (and post explanation as PR comment)
             if label_prs and github_token:
                 try:
                     owner, repo, pr = parse_pr_url(pr_url)
                     label_applied = update_complexity_label(
-                        owner, repo, pr, complexity, github_token, label_prefix, timeout
+                        owner,
+                        repo,
+                        pr,
+                        complexity,
+                        github_token,
+                        label_prefix,
+                        timeout,
+                        explanation=explanation,
                     )
                 except Exception as label_error:
                     typer.echo(

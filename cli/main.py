@@ -3,7 +3,8 @@
 import json
 import os
 import re
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, List, Optional
 
@@ -15,6 +16,7 @@ load_dotenv()
 
 from .analyze import load_prompt  # noqa: E402
 from .batch import (  # noqa: E402
+    generate_pr_list_from_all_repos,
     generate_pr_list_from_date_range,
     generate_pr_list_from_repos_file,
     load_pr_urls_from_file,
@@ -41,6 +43,7 @@ from .github import (  # noqa: E402
     check_rate_limit,
     fetch_pr,
     fetch_pr_with_rotation,
+    get_issue_details,
     update_complexity_label,
 )
 from .io_safety import normalize_path, write_json_atomic  # noqa: E402
@@ -504,6 +507,9 @@ def batch_analyze(
     repos_file: Optional[Path] = typer.Option(
         None, "--repos-file", "-r", help="File containing repo names (owner/repo per line) for date range search"
     ),
+    all_repos: bool = typer.Option(
+        False, "--all-repos", help="Dynamically scan all repos the authenticated user has access to (use with --since/--until or --days)"
+    ),
     org: Optional[str] = typer.Option(
         None, "--org", help="Organization name (for date range search)"
     ),
@@ -512,6 +518,9 @@ def batch_analyze(
     ),
     until: Optional[str] = typer.Option(
         None, "--until", help="End date (YYYY-MM-DD) for date range search"
+    ),
+    days: Optional[int] = typer.Option(
+        None, "--days", "-d", help="Shortcut: last N days (e.g. --days 5 for last 5 days). Use with --all-repos."
     ),
     output_file: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output CSV file path (required unless --label is used)"
@@ -597,19 +606,20 @@ def batch_analyze(
     """
     try:
         # Validate inputs
-        if input_file and (org or repos_file or since or until):
+        if input_file and (org or repos_file or all_repos or since or until):
             typer.echo("Error: Cannot specify both --input-file and date range options", err=True)
             raise typer.Exit(1)
 
-        if org and repos_file:
-            typer.echo("Error: Cannot specify both --org and --repos-file", err=True)
+        if sum(bool(x) for x in [org, repos_file, all_repos]) > 1:
+            typer.echo("Error: Cannot specify more than one of --org, --repos-file, --all-repos", err=True)
             raise typer.Exit(1)
 
-        has_date_range = org and since and until
-        has_repos_date_range = repos_file and since and until
-        if not input_file and not has_date_range and not has_repos_date_range:
+        has_date_range = org and (bool(since and until) or (days is not None and days > 0))
+        has_repos_date_range = repos_file and (bool(since and until) or (days is not None and days > 0))
+        has_all_repos_date_range = all_repos and (bool(since and until) or (days is not None and days > 0))
+        if not input_file and not has_date_range and not has_repos_date_range and not has_all_repos_date_range:
             typer.echo(
-                "Error: Must specify either --input-file OR (--org, --since, --until) OR (--repos-file, --since, --until)",
+                "Error: Must specify either --input-file OR (--org, --since/--until or --days) OR (--repos-file, --since/--until or --days) OR (--all-repos, --since/--until or --days)",
                 err=True,
             )
             raise typer.Exit(1)
@@ -691,18 +701,37 @@ def batch_analyze(
             pr_urls = load_pr_urls_from_file(input_file)
         else:
             # Parse dates (required for both org and repos-file modes)
-            try:
-                since_dt = datetime.strptime(since, "%Y-%m-%d")
-                until_dt = datetime.strptime(until, "%Y-%m-%d")
-            except ValueError as e:
-                typer.echo(f"Error: Invalid date format. Use YYYY-MM-DD: {e}", err=True)
-                raise typer.Exit(1)
+            if days is not None and days > 0:
+                until_dt = datetime.now().date()
+                since_dt = until_dt - timedelta(days=days - 1)
+                since_dt = datetime.combine(since_dt, datetime.min.time())
+                until_dt = datetime.combine(until_dt, datetime.min.time())
+                typer.echo(f"Using --days {days}: {since_dt.date()} to {until_dt.date()}", err=True)
+            else:
+                try:
+                    since_dt = datetime.strptime(since, "%Y-%m-%d")
+                    until_dt = datetime.strptime(until, "%Y-%m-%d")
+                except ValueError as e:
+                    typer.echo(f"Error: Invalid date format. Use YYYY-MM-DD: {e}", err=True)
+                    raise typer.Exit(1)
 
             if since_dt > until_dt:
                 typer.echo("Error: --since date must be before --until date", err=True)
                 raise typer.Exit(1)
 
-            if repos_file:
+            if all_repos:
+                if not github_token:
+                    typer.echo("Error: GitHub token required for --all-repos. Set GH_TOKEN or run `gh auth login`", err=True)
+                    raise typer.Exit(1)
+                pr_urls = generate_pr_list_from_all_repos(
+                    since=since_dt,
+                    until=until_dt,
+                    cache_file=cache_file,
+                    github_token=github_token,
+                    sleep_seconds=sleep_seconds,
+                    merged_only=True,
+                )
+            elif repos_file:
                 pr_urls = generate_pr_list_from_repos_file(
                     repos_file=repos_file,
                     since=since_dt,
@@ -767,6 +796,160 @@ def batch_analyze(
             timeout=timeout,
             force=force,
         )
+
+    except KeyboardInterrupt:
+        typer.echo("\nInterrupted by user", err=True)
+        raise typer.Exit(130)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        ErrorHandler.handle_unexpected_error(e, debug=bool(os.getenv("DEBUG")))
+        raise typer.Exit(1)
+
+
+@app.command(name="export-labels")
+def export_labels(
+    input_file: Optional[Path] = typer.Option(
+        None, "--input-file", "-i", help="File containing PR URLs (one per line)"
+    ),
+    repos_file: Optional[Path] = typer.Option(
+        None, "--repos-file", "-r", help="File containing repo names (owner/repo per line)"
+    ),
+    org: Optional[str] = typer.Option(
+        None, "--org", help="Organization name (for date range search)"
+    ),
+    since: Optional[str] = typer.Option(
+        None, "--since", help="Start date (YYYY-MM-DD) for date range search"
+    ),
+    until: Optional[str] = typer.Option(
+        None, "--until", help="End date (YYYY-MM-DD) for date range search"
+    ),
+    output_file: Path = typer.Option(
+        "complexity-report.csv", "--output", "-o", help="Output CSV file path"
+    ),
+    cache_file: Optional[Path] = typer.Option(
+        None, "--cache", help="Cache file for PR list (used with date range)"
+    ),
+    label_prefix: str = typer.Option(
+        "complexity:", "--label-prefix", help="Prefix for complexity labels"
+    ),
+    sleep_seconds: float = typer.Option(
+        DEFAULT_SLEEP_SECONDS, "--sleep-seconds", help="Sleep between GitHub API calls"
+    ),
+):
+    """
+    Export existing complexity labels to CSV without re-analyzing.
+
+    Fetches PRs and reads their complexity labels from GitHub. No LLM calls.
+    Use after batch-analyze --label to dump all labeled PRs to a file.
+
+    Provide one of:
+    - --input-file: explicit PR URLs
+    - --org with --since/--until: scan all repos in an organization
+    - --repos-file with --since/--until: scan only repos listed in file
+    """
+    try:
+        if input_file and (org or repos_file or since or until):
+            typer.echo("Error: Cannot specify both --input-file and date range options", err=True)
+            raise typer.Exit(1)
+
+        if org and repos_file:
+            typer.echo("Error: Cannot specify both --org and --repos-file", err=True)
+            raise typer.Exit(1)
+
+        has_date_range = org and since and until
+        has_repos_date_range = repos_file and since and until
+        if not input_file and not has_date_range and not has_repos_date_range:
+            typer.echo(
+                "Error: Must specify either --input-file OR (--org, --since, --until) OR (--repos-file, --since, --until)",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        github_token = get_github_token()
+        if not github_token:
+            typer.echo("Error: GitHub token required. Set GH_TOKEN or run `gh auth login`", err=True)
+            raise typer.Exit(1)
+
+        if input_file:
+            typer.echo(f"Loading PR URLs from file: {input_file}", err=True)
+            pr_urls = load_pr_urls_from_file(input_file)
+        else:
+            try:
+                since_dt = datetime.strptime(since, "%Y-%m-%d")
+                until_dt = datetime.strptime(until, "%Y-%m-%d")
+            except ValueError as e:
+                typer.echo(f"Error: Invalid date format. Use YYYY-MM-DD: {e}", err=True)
+                raise typer.Exit(1)
+
+            if since_dt > until_dt:
+                typer.echo("Error: --since date must be before --until date", err=True)
+                raise typer.Exit(1)
+
+            if repos_file:
+                pr_urls = generate_pr_list_from_repos_file(
+                    repos_file=repos_file,
+                    since=since_dt,
+                    until=until_dt,
+                    cache_file=cache_file,
+                    github_token=github_token,
+                    sleep_seconds=sleep_seconds,
+                )
+            else:
+                pr_urls = generate_pr_list_from_date_range(
+                    org=org,
+                    since=since_dt,
+                    until=until_dt,
+                    cache_file=cache_file,
+                    github_token=github_token,
+                    sleep_seconds=sleep_seconds,
+                )
+
+        typer.echo(f"Exporting labels for {len(pr_urls)} PRs to {output_file}...", err=True)
+
+        from .csv_handler import CSVBatchWriter
+
+        csv_writer = CSVBatchWriter(output_file)
+        exported = 0
+        skipped = 0
+
+        for idx, pr_url in enumerate(pr_urls, 1):
+            try:
+                owner, repo, pr = parse_pr_url(pr_url)
+                details = get_issue_details(owner, repo, pr, token=github_token)
+
+                author = details.get("user", "") or ""
+                labels = details.get("labels", [])
+
+                complexity = None
+                for lb in labels:
+                    if lb.startswith(label_prefix):
+                        try:
+                            complexity = int(lb[len(label_prefix) :].strip())
+                            break
+                        except ValueError:
+                            pass
+
+                if complexity is not None:
+                    csv_writer.add_row(pr_url, complexity, "", author)
+                    exported += 1
+                else:
+                    skipped += 1
+
+                if idx % 20 == 0:
+                    typer.echo(f"  Processed {idx}/{len(pr_urls)}...", err=True)
+
+                time.sleep(sleep_seconds * 0.5)
+
+            except Exception as e:
+                typer.echo(f"  Warning: Skipping {pr_url}: {e}", err=True)
+                skipped += 1
+
+        csv_writer.close()
+
+        typer.echo(f"\n✓ Exported {exported} PRs to {output_file}", err=True)
+        if skipped:
+            typer.echo(f"  Skipped {skipped} PRs (no complexity label)", err=True)
 
     except KeyboardInterrupt:
         typer.echo("\nInterrupted by user", err=True)
@@ -982,7 +1165,7 @@ def label_pr(
             label_name = f"{label_prefix}{complexity}"
             typer.echo(f"Dry run: Would set label '{label_name}'", err=True)
         else:
-            typer.echo("Updating PR label...", err=True)
+            typer.echo("Updating PR label and posting explanation...", err=True)
             try:
                 label_name = update_complexity_label(
                     owner=owner,
@@ -992,6 +1175,7 @@ def label_pr(
                     token=final_github_token,
                     label_prefix=label_prefix,
                     timeout=timeout,
+                    explanation=output.get("explanation", ""),
                 )
                 typer.echo(f"Label set: {label_name}", err=True)
             except GitHubAPIError as e:
