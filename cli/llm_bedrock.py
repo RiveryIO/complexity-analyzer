@@ -99,21 +99,29 @@ class BedrockProvider(LLMProvider):
             f"diff_excerpt:\n{diff_excerpt}\n\nstats_json:\n{stats_json}\n\ntitle:\n{title}"
         )
 
+        json_instruction = (
+            "\n\nRespond with ONLY a valid JSON object: {\"complexity\": <int 1-10>, \"explanation\": \"<string>\"}"
+        )
+
         messages = [
             {"role": "user", "content": [{"text": user_content}]},
         ]
 
+        use_structured_output = True
+
         for attempt in range(max_retries):
             try:
-                response = self.client.converse(
-                    modelId=self._model,
-                    messages=messages,
-                    system=[{"text": prompt}],
-                    inferenceConfig={
+                kwargs: Dict[str, Any] = {
+                    "modelId": self._model,
+                    "messages": messages,
+                    "system": [{"text": prompt + ("" if use_structured_output else json_instruction)}],
+                    "inferenceConfig": {
                         "maxTokens": 2048,
                         "temperature": 0.0,
                     },
-                    outputConfig={
+                }
+                if use_structured_output:
+                    kwargs["outputConfig"] = {
                         "textFormat": {
                             "type": "json_schema",
                             "structure": {
@@ -124,8 +132,9 @@ class BedrockProvider(LLMProvider):
                                 }
                             },
                         }
-                    },
-                )
+                    }
+
+                response = self.client.converse(**kwargs)
 
                 content = self._extract_content(response)
                 if not content:
@@ -160,6 +169,14 @@ class BedrockProvider(LLMProvider):
                 raise LLMError(f"Failed to parse response after {max_retries} attempts: {e}")
 
             except Exception as e:
+                err_msg = str(e).lower()
+                if use_structured_output and (
+                    "validationexception" in err_msg
+                    or "not valid" in err_msg
+                    or "not supported" in err_msg
+                ):
+                    use_structured_output = False
+                    continue
                 if attempt < max_retries - 1:
                     delay = retry_delay * (2**attempt)
                     delay += (time.time() % 1) * 0.1
