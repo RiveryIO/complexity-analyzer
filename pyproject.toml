@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "openai>=1.0.0",
+    "boto3>=1.34.0",
     "tiktoken>=0.7.0",
     "typer>=0.9.0",
     "httpx>=0.24.0",

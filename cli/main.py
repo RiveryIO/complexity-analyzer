@@ -42,7 +42,7 @@ from .github import (  # noqa: E402
     update_complexity_label,
 )
 from .io_safety import normalize_path, write_json_atomic  # noqa: E402
-from .llm import LLMError, OpenAIProvider  # noqa: E402
+from .llm import LLMError, create_llm_provider  # noqa: E402
 from .logging_config import get_logger, setup_logging  # noqa: E402
 from .preprocess import make_prompt_input, process_diff  # noqa: E402
 from .scoring import InvalidResponseError  # noqa: E402
@@ -61,7 +61,7 @@ def analyze_pr_to_dict(
     pr_url: str,
     prompt_text: str,
     github_token: Optional[str],
-    openai_key: str,
+    openai_key: Optional[str],
     model: str = DEFAULT_MODEL,
     timeout: float = DEFAULT_TIMEOUT,
     max_tokens: int = DEFAULT_MAX_TOKENS,
@@ -69,6 +69,9 @@ def analyze_pr_to_dict(
     sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
     progress_callback: Optional[Callable[[str], None]] = None,
     token_rotator: Optional[TokenRotator] = None,
+    provider: str = "openai",
+    bedrock_model: Optional[str] = None,
+    bedrock_region: Optional[str] = None,
 ) -> dict:
     """
     Analyze a GitHub PR and return result as dictionary.
@@ -80,14 +83,17 @@ def analyze_pr_to_dict(
         pr_url: GitHub PR URL
         prompt_text: Prompt text for LLM
         github_token: GitHub API token (optional, ignored if token_rotator is provided)
-        openai_key: OpenAI API key (required)
-        model: OpenAI model name
+        openai_key: OpenAI API key (required when provider is openai)
+        model: OpenAI model name (used when provider is openai)
         timeout: Request timeout in seconds
         max_tokens: Maximum tokens for diff excerpt
         hunks_per_file: Maximum hunks per file
         sleep_seconds: Sleep between GitHub API calls
         progress_callback: Optional callback for progress messages (e.g., rate limit warnings)
         token_rotator: Optional TokenRotator for automatic token rotation on rate limits
+        provider: LLM provider ("openai" or "bedrock")
+        bedrock_model: Bedrock model ID (overrides env when provider is bedrock)
+        bedrock_region: Bedrock region (overrides env when provider is bedrock)
 
     Returns:
         Dict with keys: score, explanation, provider, model, tokens, timestamp,
@@ -136,8 +142,15 @@ def analyze_pr_to_dict(
     diff_for_prompt = make_prompt_input(pr_url, title, stats, selected_files, truncated_diff)
 
     # Call LLM
-    provider = OpenAIProvider(openai_key, model=model, timeout=timeout)
-    result = provider.analyze_complexity(
+    llm_provider = create_llm_provider(
+        provider,
+        openai_key=openai_key,
+        model=model,
+        bedrock_model=bedrock_model,
+        bedrock_region=bedrock_region,
+        timeout=timeout,
+    )
+    result = llm_provider.analyze_complexity(
         prompt=prompt_text,
         diff_excerpt=diff_for_prompt,
         stats_json=json.dumps(stats),
@@ -148,8 +161,8 @@ def analyze_pr_to_dict(
     output = {
         "score": result["complexity"],
         "explanation": result["explanation"],
-        "provider": result.get("provider", "openai"),
-        "model": result.get("model", model),
+        "provider": result.get("provider", provider),
+        "model": result.get("model", llm_provider.model_name),
         "tokens": result.get("tokens"),
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "repo": f"{owner}/{repo}",
@@ -176,6 +189,9 @@ def _analyze_pr_impl(
     openai_api_key: Optional[str] = None,
     github_token: Optional[str] = None,
     verbose: bool = False,
+    provider: str = "openai",
+    bedrock_model: Optional[str] = None,
+    bedrock_region: Optional[str] = None,
 ):
     """
     Analyze a GitHub PR and compute complexity score.
@@ -198,14 +214,20 @@ def _analyze_pr_impl(
         final_github_token = github_token or get_github_token()
         final_openai_key = openai_api_key or get_openai_api_key()
 
-        if not final_openai_key:
+        if provider == "openai" and not final_openai_key:
             typer.echo(
-                "Error: OPENAI_API_KEY environment variable or argument is required", err=True
+                "Error: OPENAI_API_KEY environment variable or argument is required for openai provider",
+                err=True,
             )
             typer.echo(
                 "Set it with: export OPENAI_API_KEY='your-key' or pass --openai-api-key", err=True
             )
             raise typer.Exit(1)
+        if provider == "bedrock":
+            typer.echo(
+                "Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set (e.g. bedrock_env).",
+                err=True,
+            )
 
         # Load prompt
         try:
@@ -260,6 +282,9 @@ def _analyze_pr_impl(
                 max_tokens=max_tokens,
                 hunks_per_file=hunks_per_file,
                 sleep_seconds=sleep_seconds,
+                provider=provider,
+                bedrock_model=bedrock_model,
+                bedrock_region=bedrock_region,
             )
             typer.echo(f"PR: {output['title']}", err=True)
             typer.echo("Processing diff...", err=True)
@@ -403,6 +428,15 @@ def analyze_pr(
     openai_api_key: Optional[str] = typer.Option(None, "--openai-api-key", help="OpenAI API key"),
     github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
+    provider: str = typer.Option(
+        "openai", "--provider", help="LLM provider: openai or bedrock"
+    ),
+    bedrock_model: Optional[str] = typer.Option(
+        None, "--bedrock-model", help="Bedrock model ID (e.g. anthropic.claude-sonnet-4-5-20250929-v1:0)"
+    ),
+    bedrock_region: Optional[str] = typer.Option(
+        None, "--bedrock-region", help="AWS region for Bedrock (default: AWS_REGION or us-east-1)"
+    ),
 ):
     """Analyze a GitHub PR and compute complexity score."""
     final_pr_url = pr_url
@@ -431,6 +465,9 @@ def analyze_pr(
         openai_api_key=openai_api_key,
         github_token=github_token,
         verbose=verbose,
+        provider=provider,
+        bedrock_model=bedrock_model,
+        bedrock_region=bedrock_region,
     )
 
 
@@ -491,6 +528,15 @@ def batch_analyze(
         help="Comma-separated list of GitHub tokens for rotation on rate limits. "
         "Can also be set via GH_TOKENS or GITHUB_TOKENS environment variables.",
     ),
+    provider: str = typer.Option(
+        "openai", "--provider", help="LLM provider: openai or bedrock"
+    ),
+    bedrock_model: Optional[str] = typer.Option(
+        None, "--bedrock-model", help="Bedrock model ID"
+    ),
+    bedrock_region: Optional[str] = typer.Option(
+        None, "--bedrock-region", help="AWS region for Bedrock"
+    ),
 ):
     """
     Batch analyze multiple PRs from a file or date range.
@@ -535,10 +581,12 @@ def batch_analyze(
         # Get credentials
         openai_key = get_openai_api_key()
 
-        if not openai_key:
-            typer.echo("Error: OPENAI_API_KEY environment variable is required", err=True)
+        if provider == "openai" and not openai_key:
+            typer.echo("Error: OPENAI_API_KEY environment variable is required for openai provider", err=True)
             typer.echo("Set it with: export OPENAI_API_KEY='your-key'", err=True)
             raise typer.Exit(1)
+        if provider == "bedrock":
+            typer.echo("Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set.", err=True)
 
         # Get GitHub tokens - CLI option takes precedence over environment
         token_list: List[str] = []
@@ -634,6 +682,9 @@ def batch_analyze(
                 sleep_seconds=sleep_seconds,
                 progress_callback=progress_msg,
                 token_rotator=token_rotator,
+                provider=provider,
+                bedrock_model=bedrock_model,
+                bedrock_region=bedrock_region,
             )
 
         # Validate workers
@@ -751,6 +802,15 @@ def label_pr(
     dry_run: bool = typer.Option(False, "--dry-run", help="Analyze but don't update label"),
     openai_api_key: Optional[str] = typer.Option(None, "--openai-api-key", help="OpenAI API key"),
     github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
+    provider: str = typer.Option(
+        "openai", "--provider", help="LLM provider: openai or bedrock"
+    ),
+    bedrock_model: Optional[str] = typer.Option(
+        None, "--bedrock-model", help="Bedrock model ID"
+    ),
+    bedrock_region: Optional[str] = typer.Option(
+        None, "--bedrock-region", help="AWS region for Bedrock"
+    ),
 ):
     """
     Analyze a GitHub PR and update its complexity label.
@@ -760,7 +820,8 @@ def label_pr(
 
     Environment variables:
     - GH_TOKEN or GITHUB_TOKEN: GitHub API token (required for label updates)
-    - OPENAI_API_KEY: OpenAI API key (required)
+    - OPENAI_API_KEY: OpenAI API key (required for openai provider)
+    - AWS_PROFILE, AWS_REGION: For Bedrock provider
     """
     try:
         # Get PR URL
@@ -785,14 +846,19 @@ def label_pr(
         final_github_token = github_token or get_github_token()
         final_openai_key = openai_api_key or get_openai_api_key()
 
-        if not final_openai_key:
+        if provider == "openai" and not final_openai_key:
             typer.echo(
-                "Error: OPENAI_API_KEY environment variable or argument is required", err=True
+                "Error: OPENAI_API_KEY environment variable or argument is required for openai provider",
+                err=True,
             )
             typer.echo(
                 "Set it with: export OPENAI_API_KEY='your-key' or pass --openai-api-key", err=True
             )
             raise typer.Exit(1)
+        if provider == "bedrock":
+            typer.echo(
+                "Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set.", err=True
+            )
 
         if not final_github_token:
             typer.echo("Error: GitHub token is required to update labels", err=True)
@@ -819,6 +885,9 @@ def label_pr(
                 max_tokens=max_tokens,
                 hunks_per_file=hunks_per_file,
                 sleep_seconds=sleep_seconds,
+                provider=provider,
+                bedrock_model=bedrock_model,
+                bedrock_region=bedrock_region,
             )
         except GitHubAPIError as e:
             if e.status_code == 404:

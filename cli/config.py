@@ -55,6 +55,26 @@ def get_openai_api_key() -> Optional[str]:
     return os.getenv("OPENAI_API_KEY")
 
 
+def get_bedrock_config() -> tuple[str, str]:
+    """
+    Get Bedrock region and model ID from environment.
+
+    Returns:
+        Tuple of (region, model_id).
+        Region: BEDROCK_REGION or AWS_REGION or "us-east-1"
+        Model: BEDROCK_MODEL_ID or DEFAULT_BEDROCK_MODEL
+    """
+    from .constants import DEFAULT_BEDROCK_MODEL
+
+    region = (
+        os.getenv("BEDROCK_REGION")
+        or os.getenv("AWS_REGION")
+        or "us-east-1"
+    )
+    model_id = os.getenv("BEDROCK_MODEL_ID") or DEFAULT_BEDROCK_MODEL
+    return (region, model_id)
+
+
 def validate_owner_repo(owner: str, repo: str) -> None:
     """Validate owner and repo names."""
     pattern = re.compile(r"^[A-Za-z0-9_.-]+$")

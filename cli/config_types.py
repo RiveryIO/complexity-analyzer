@@ -34,6 +34,11 @@ class AnalysisConfig:
     github_token: Optional[str] = None
     openai_key: Optional[str] = None
 
+    # Provider selection
+    provider: Literal["openai", "bedrock"] = "openai"
+    bedrock_model: Optional[str] = None
+    bedrock_region: Optional[str] = None
+
     # Token rotation (optional)
     token_rotator: Optional["TokenRotator"] = None
 
