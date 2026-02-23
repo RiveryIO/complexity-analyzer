@@ -222,6 +222,31 @@ complexity-cli batch-analyze \
   --cache pr-list.txt
 ```
 
+#### From Repos File
+
+Scan only specific repositories (useful when you don't have org-wide access or want to limit scope):
+
+```bash
+# Create a file with repo names (owner/repo per line, # for comments)
+cat > repos.txt << EOF
+# Repos to scan
+myorg/repo-a
+myorg/repo-b
+EOF
+
+complexity-cli batch-analyze \
+  --repos-file repos.txt \
+  --since 2024-01-01 \
+  --until 2024-01-31 \
+  --output results.csv \
+  --cache pr-list.txt
+
+# With labeling
+complexity-cli batch-analyze --repos-file repos.txt --since 2024-01-01 --until 2024-01-31 --label
+```
+
+See `repos.example` for the file format.
+
 #### Batch Labeling
 
 Apply complexity labels to multiple PRs instead of generating CSV output.
@@ -265,6 +290,7 @@ complexity-cli batch-analyze --input-file prs.txt --output results.csv
 #### Batch Analysis Options
 
 - `--input-file`, `-i`: File containing PR URLs (one per line)
+- `--repos-file`, `-r`: File containing repo names (owner/repo per line) for date range search
 - `--org`: Organization name (for date range search)
 - `--since`: Start date in YYYY-MM-DD format (for date range search)
 - `--until`: End date in YYYY-MM-DD format (for date range search)

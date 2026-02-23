@@ -1,0 +1,7 @@
+# Repositories to scan for complexity analysis
+# Format: owner/repo (one per line)
+# Lines starting with # are ignored
+#
+# Example:
+# RiveryIO/complexity-analyzer
+# RiveryIO/some-other-repo

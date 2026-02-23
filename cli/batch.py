@@ -17,6 +17,7 @@ from .github import (
     GitHubAPIError,
     has_complexity_label,
     search_closed_prs,
+    search_closed_prs_by_repos,
     update_complexity_label,
 )
 from .csv_handler import CSVBatchWriter
@@ -51,6 +52,38 @@ def load_pr_urls_from_file(file_path: Path) -> List[str]:
         raise ValueError(f"Input file is empty: {file_path}")
 
     return urls
+
+
+def load_repos_from_file(file_path: Path) -> List[str]:
+    """
+    Load repository names from a text file (one owner/repo per line).
+
+    Lines starting with # and empty lines are skipped.
+
+    Args:
+        file_path: Path to file containing repo names (owner/repo format)
+
+    Returns:
+        List of repo strings (e.g. ["RiveryIO/complexity-analyzer", ...])
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If file is empty or contains invalid repo names
+    """
+    if not file_path.exists():
+        raise FileNotFoundError(f"Repos file not found: {file_path}")
+
+    content = read_text_file(file_path)
+    repos = [
+        line.strip()
+        for line in content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+    if not repos:
+        raise ValueError(f"Repos file is empty or has no valid entries: {file_path}")
+
+    return repos
 
 
 def generate_pr_list_from_date_range(
@@ -233,6 +266,97 @@ def generate_pr_list_from_date_range(
         raise typer.Exit(1)
     finally:
         # Close cache file if opened (ensure it's closed even if there's an error)
+        if cache_file_handle:
+            try:
+                cache_file_handle.close()
+                if cache_file:
+                    typer.echo(f"Saved PR list to cache: {cache_file}", err=True)
+            except Exception as e:
+                typer.echo(f"Warning: Failed to close cache file: {e}", err=True)
+
+
+def generate_pr_list_from_repos_file(
+    repos_file: Path,
+    since: datetime,
+    until: datetime,
+    cache_file: Optional[Path],
+    github_token: Optional[str],
+    sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
+) -> List[str]:
+    """
+    Generate PR list from a file of repo names and a date range.
+
+    If cache_file exists and is valid, loads from cache.
+    Otherwise, fetches from GitHub via search_closed_prs_by_repos and saves to cache.
+
+    Args:
+        repos_file: Path to file with owner/repo per line
+        since: Start date
+        until: End date
+        cache_file: Optional path to cache file
+        github_token: GitHub token
+        sleep_seconds: Sleep between API calls
+
+    Returns:
+        List of PR URLs
+    """
+    if cache_file and cache_file.exists():
+        try:
+            typer.echo(f"Loading PR list from cache: {cache_file}", err=True)
+            urls = load_pr_urls_from_file(cache_file)
+            typer.echo(f"Loaded {len(urls)} PRs from cache", err=True)
+            return urls
+        except Exception as e:
+            typer.echo(f"Warning: Failed to load cache, will fetch from GitHub: {e}", err=True)
+
+    repos = load_repos_from_file(repos_file)
+    typer.echo(
+        f"Fetching closed PRs for {len(repos)} repo(s) from {since.date()} to {until.date()}...",
+        err=True,
+    )
+
+    cache_file_handle = None
+    try:
+        if cache_file:
+            try:
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                cache_file_handle = cache_file.open("w", encoding="utf-8")
+                typer.echo(f"Writing PRs to cache file: {cache_file}", err=True)
+            except Exception as e:
+                typer.echo(f"Warning: Failed to open cache file for writing: {e}", err=True)
+                cache_file = None
+
+        def write_pr_to_cache(pr_url: str) -> None:
+            if cache_file_handle:
+                try:
+                    cache_file_handle.write(f"{pr_url}\n")
+                    cache_file_handle.flush()
+                except Exception as e:
+                    typer.echo(f"Warning: Failed to write to cache: {e}", err=True)
+
+        def progress_msg(msg: str) -> None:
+            typer.echo(msg, err=True)
+
+        with httpx.Client(timeout=60.0) as client:
+            urls = search_closed_prs_by_repos(
+                repos=repos,
+                since=since,
+                until=until,
+                token=github_token,
+                sleep_s=sleep_seconds,
+                on_pr_found=write_pr_to_cache if cache_file else None,
+                progress_callback=progress_msg,
+                client=client,
+            )
+            typer.echo(f"Found {len(urls)} PRs", err=True)
+            return urls
+    except GitHubAPIError as e:
+        typer.echo(f"Error fetching PRs: {e}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Unexpected error fetching PRs: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
         if cache_file_handle:
             try:
                 cache_file_handle.close()

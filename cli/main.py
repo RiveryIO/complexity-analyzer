@@ -16,6 +16,7 @@ load_dotenv()
 from .analyze import load_prompt  # noqa: E402
 from .batch import (  # noqa: E402
     generate_pr_list_from_date_range,
+    generate_pr_list_from_repos_file,
     load_pr_urls_from_file,
 )
 from .config import (  # noqa: E402
@@ -498,6 +499,9 @@ def batch_analyze(
     input_file: Optional[Path] = typer.Option(
         None, "--input-file", "-i", help="File containing PR URLs (one per line)"
     ),
+    repos_file: Optional[Path] = typer.Option(
+        None, "--repos-file", "-r", help="File containing repo names (owner/repo per line) for date range search"
+    ),
     org: Optional[str] = typer.Option(
         None, "--org", help="Organization name (for date range search)"
     ),
@@ -566,7 +570,10 @@ def batch_analyze(
     """
     Batch analyze multiple PRs from a file or date range.
 
-    Either --input-file OR (--org, --since, --until) must be provided.
+    Provide one of:
+    - --input-file: explicit PR URLs (one per line)
+    - --org with --since/--until: scan all repos in an organization
+    - --repos-file with --since/--until: scan only repos listed in file (owner/repo per line)
 
     By default, output is written to CSV with columns: pr_url, complexity, explanation.
     Use --label to apply complexity labels to PRs instead of CSV output.
@@ -588,13 +595,20 @@ def batch_analyze(
     """
     try:
         # Validate inputs
-        if input_file and (org or since or until):
+        if input_file and (org or repos_file or since or until):
             typer.echo("Error: Cannot specify both --input-file and date range options", err=True)
             raise typer.Exit(1)
 
-        if not input_file and not (org and since and until):
+        if org and repos_file:
+            typer.echo("Error: Cannot specify both --org and --repos-file", err=True)
+            raise typer.Exit(1)
+
+        has_date_range = org and since and until
+        has_repos_date_range = repos_file and since and until
+        if not input_file and not has_date_range and not has_repos_date_range:
             typer.echo(
-                "Error: Must specify either --input-file OR (--org, --since, --until)", err=True
+                "Error: Must specify either --input-file OR (--org, --since, --until) OR (--repos-file, --since, --until)",
+                err=True,
             )
             raise typer.Exit(1)
 
@@ -670,7 +684,7 @@ def batch_analyze(
             typer.echo(f"Loading PR URLs from file: {input_file}", err=True)
             pr_urls = load_pr_urls_from_file(input_file)
         else:
-            # Parse dates
+            # Parse dates (required for both org and repos-file modes)
             try:
                 since_dt = datetime.strptime(since, "%Y-%m-%d")
                 until_dt = datetime.strptime(until, "%Y-%m-%d")
@@ -682,14 +696,24 @@ def batch_analyze(
                 typer.echo("Error: --since date must be before --until date", err=True)
                 raise typer.Exit(1)
 
-            pr_urls = generate_pr_list_from_date_range(
-                org=org,
-                since=since_dt,
-                until=until_dt,
-                cache_file=cache_file,
-                github_token=github_token,
-                sleep_seconds=sleep_seconds,
-            )
+            if repos_file:
+                pr_urls = generate_pr_list_from_repos_file(
+                    repos_file=repos_file,
+                    since=since_dt,
+                    until=until_dt,
+                    cache_file=cache_file,
+                    github_token=github_token,
+                    sleep_seconds=sleep_seconds,
+                )
+            else:
+                pr_urls = generate_pr_list_from_date_range(
+                    org=org,
+                    since=since_dt,
+                    until=until_dt,
+                    cache_file=cache_file,
+                    github_token=github_token,
+                    sleep_seconds=sleep_seconds,
+                )
 
         # Create analyzer function with progress callback
         def progress_msg(msg: str) -> None:

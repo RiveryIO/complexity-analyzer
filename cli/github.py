@@ -4,7 +4,7 @@ import re
 import threading
 import time
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import httpx
 
@@ -963,69 +963,29 @@ def has_complexity_label(
     return None
 
 
-def search_closed_prs(
-    org: str,
-    since: datetime,
-    until: datetime,
-    token: Optional[str] = None,
-    sleep_s: float = 2.0,
-    timeout: float = DEFAULT_TIMEOUT,
-    on_pr_found: Optional[Callable[[str], None]] = None,
-    max_retries: int = 5,
-    progress_callback: Optional[Callable[[str], None]] = None,
-    client: Optional[httpx.Client] = None,
+REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def _search_prs_with_query(
+    query: str,
+    token: Optional[str],
+    sleep_s: float,
+    timeout: float,
+    on_pr_found: Optional[Callable[[str], None]],
+    max_retries: int,
+    progress_callback: Optional[Callable[[str], None]],
+    client: httpx.Client,
 ) -> List[str]:
     """
-    Search for closed PRs in an organization within a date range.
-
-    Uses GitHub Search API to find PRs closed between since and until dates.
-    Handles secondary rate limits with exponential backoff.
-
-    Args:
-        org: Organization name
-        token: GitHub token (required for private repos)
-        since: Start date (inclusive)
-        until: End date (inclusive)
-        sleep_s: Sleep between API requests in seconds (default: 2.0 to avoid secondary limits)
-        timeout: Request timeout in seconds
-        on_pr_found: Optional callback function called for each PR URL as it's found
-        max_retries: Maximum number of retries for rate limit errors
-        progress_callback: Optional callback for progress messages (e.g., rate limit warnings)
-        client: Optional httpx.Client to reuse connections
-
-    Returns:
-        List of PR URLs (e.g., ["https://github.com/org/repo/pull/123", ...])
-
-    Raises:
-        GitHubAPIError: If API call fails after retries
-        ValueError: If org name is invalid
+    Execute a GitHub search query for closed PRs. Internal helper used by
+    search_closed_prs and search_closed_prs_by_repos.
     """
-    # Validate org name
-    pattern = re.compile(r"^[A-Za-z0-9_.-]+$")
-    if not pattern.match(org):
-        raise ValueError(f"Invalid organization name: {org}")
-
     headers = build_github_headers(token)
-
-    # Format dates for GitHub search (YYYY-MM-DD)
-    since_str = since.strftime("%Y-%m-%d")
-    until_str = until.strftime("%Y-%m-%d")
-
-    # GitHub search query: org:orgname is:pr is:closed closed:YYYY-MM-DD..YYYY-MM-DD
-    query = f"org:{org} is:pr is:closed closed:{since_str}..{until_str}"
-
     url = "https://api.github.com/search/issues"
-    # GitHub Search API limit is 100 items per page
-    # Total limit is 1000 items (will need to refine search if exceeded)
     per_page = GITHUB_PER_PAGE
     params = {"q": query, "per_page": per_page, "page": 1}
 
     pr_urls: List[str] = []
-
-    should_close_client = False
-    if client is None:
-        client = httpx.Client(timeout=timeout)
-        should_close_client = True
 
     try:
         # Check rate limit before starting search
@@ -1212,8 +1172,149 @@ def search_closed_prs(
         )
     except httpx.RequestError as e:
         raise RuntimeError(f"Failed to search PRs: {e}")
+
+    return pr_urls
+
+
+def search_closed_prs(
+    org: str,
+    since: datetime,
+    until: datetime,
+    token: Optional[str] = None,
+    sleep_s: float = 2.0,
+    timeout: float = DEFAULT_TIMEOUT,
+    on_pr_found: Optional[Callable[[str], None]] = None,
+    max_retries: int = 5,
+    progress_callback: Optional[Callable[[str], None]] = None,
+    client: Optional[httpx.Client] = None,
+) -> List[str]:
+    """
+    Search for closed PRs in an organization within a date range.
+
+    Uses GitHub Search API to find PRs closed between since and until dates.
+    Handles secondary rate limits with exponential backoff.
+
+    Args:
+        org: Organization name
+        token: GitHub token (required for private repos)
+        since: Start date (inclusive)
+        until: End date (inclusive)
+        sleep_s: Sleep between API requests in seconds (default: 2.0 to avoid secondary limits)
+        timeout: Request timeout in seconds
+        on_pr_found: Optional callback function called for each PR URL as it's found
+        max_retries: Maximum number of retries for rate limit errors
+        progress_callback: Optional callback for progress messages (e.g., rate limit warnings)
+        client: Optional httpx.Client to reuse connections
+
+    Returns:
+        List of PR URLs (e.g., ["https://github.com/org/repo/pull/123", ...])
+
+    Raises:
+        GitHubAPIError: If API call fails after retries
+        ValueError: If org name is invalid
+    """
+    pattern = re.compile(r"^[A-Za-z0-9_.-]+$")
+    if not pattern.match(org):
+        raise ValueError(f"Invalid organization name: {org}")
+
+    since_str = since.strftime("%Y-%m-%d")
+    until_str = until.strftime("%Y-%m-%d")
+    query = f"org:{org} is:pr is:closed closed:{since_str}..{until_str}"
+
+    should_close_client = client is None
+    if client is None:
+        client = httpx.Client(timeout=timeout)
+
+    try:
+        return _search_prs_with_query(
+            query=query,
+            token=token,
+            sleep_s=sleep_s,
+            timeout=timeout,
+            on_pr_found=on_pr_found,
+            max_retries=max_retries,
+            progress_callback=progress_callback,
+            client=client,
+        )
     finally:
         if should_close_client:
             client.close()
 
-    return pr_urls
+
+def search_closed_prs_by_repos(
+    repos: List[str],
+    since: datetime,
+    until: datetime,
+    token: Optional[str] = None,
+    sleep_s: float = 2.0,
+    timeout: float = DEFAULT_TIMEOUT,
+    on_pr_found: Optional[Callable[[str], None]] = None,
+    max_retries: int = 5,
+    progress_callback: Optional[Callable[[str], None]] = None,
+    client: Optional[httpx.Client] = None,
+) -> List[str]:
+    """
+    Search for closed PRs in a list of repositories within a date range.
+
+    Uses GitHub Search API to find PRs closed between since and until dates.
+    Searches each repo separately and merges results.
+
+    Args:
+        repos: List of "owner/repo" strings
+        token: GitHub token (required for private repos)
+        since: Start date (inclusive)
+        until: End date (inclusive)
+        sleep_s: Sleep between API requests in seconds
+        timeout: Request timeout in seconds
+        on_pr_found: Optional callback function called for each PR URL as it's found
+        max_retries: Maximum number of retries for rate limit errors
+        progress_callback: Optional callback for progress messages
+        client: Optional httpx.Client to reuse connections
+
+    Returns:
+        List of PR URLs (deduplicated)
+    """
+    # Normalize: strip, skip empty lines and comments
+    repo_list = [r.strip() for r in repos if r.strip() and not r.strip().startswith("#")]
+    if not repo_list:
+        return []
+
+    for repo in repo_list:
+        if not REPO_PATTERN.match(repo):
+            raise ValueError(f"Invalid repo format: {repo!r}. Use owner/repo (e.g. RiveryIO/complexity-analyzer)")
+
+    since_str = since.strftime("%Y-%m-%d")
+    until_str = until.strftime("%Y-%m-%d")
+
+    should_close_client = client is None
+    if client is None:
+        client = httpx.Client(timeout=timeout)
+
+    seen: Set[str] = set()
+    all_urls: List[str] = []
+
+    try:
+        for i, repo in enumerate(repo_list):
+            query = f"repo:{repo} is:pr is:closed closed:{since_str}..{until_str}"
+            if progress_callback:
+                progress_callback(f"Searching {repo}...")
+            urls = _search_prs_with_query(
+                query=query,
+                token=token,
+                sleep_s=sleep_s,
+                timeout=timeout,
+                on_pr_found=on_pr_found,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+                client=client,
+            )
+            for url in urls:
+                if url not in seen:
+                    seen.add(url)
+                    all_urls.append(url)
+            if i < len(repo_list) - 1:
+                time.sleep(sleep_s)
+        return all_urls
+    finally:
+        if should_close_client:
+            client.close()

@@ -6,7 +6,9 @@ from datetime import datetime
 from unittest.mock import patch
 from cli.batch import (
     load_pr_urls_from_file,
+    load_repos_from_file,
     generate_pr_list_from_date_range,
+    generate_pr_list_from_repos_file,
     load_completed_prs,
     write_csv_row,
     run_batch_analysis,
@@ -44,6 +46,61 @@ def test_load_pr_urls_from_file_empty(tmp_path):
 
     with pytest.raises(ValueError):
         load_pr_urls_from_file(pr_file)
+
+
+def test_load_repos_from_file(tmp_path):
+    """Test loading repos from file."""
+    repos_file = tmp_path / "repos.txt"
+    repos_file.write_text(
+        "# Comment line\n"
+        "owner/repo-a\n"
+        "owner/repo-b\n"
+        "\n"
+        "  owner/repo-c  \n"
+    )
+
+    repos = load_repos_from_file(repos_file)
+    assert repos == ["owner/repo-a", "owner/repo-b", "owner/repo-c"]
+
+
+def test_load_repos_from_file_not_found(tmp_path):
+    """Test loading repos from non-existent file."""
+    with pytest.raises(FileNotFoundError):
+        load_repos_from_file(tmp_path / "nonexistent.txt")
+
+
+def test_load_repos_from_file_empty(tmp_path):
+    """Test loading repos from empty file."""
+    repos_file = tmp_path / "empty.txt"
+    repos_file.write_text("# Only comments\n\n")
+
+    with pytest.raises(ValueError):
+        load_repos_from_file(repos_file)
+
+
+@patch("cli.batch.search_closed_prs_by_repos")
+def test_generate_pr_list_from_repos_file(mock_search, tmp_path):
+    """Test generating PR list from repos file."""
+    repos_file = tmp_path / "repos.txt"
+    repos_file.write_text("owner/repo-a\nowner/repo-b\n")
+
+    mock_search.return_value = [
+        "https://github.com/owner/repo-a/pull/1",
+        "https://github.com/owner/repo-b/pull/2",
+    ]
+
+    urls = generate_pr_list_from_repos_file(
+        repos_file=repos_file,
+        since=datetime(2024, 1, 1),
+        until=datetime(2024, 1, 31),
+        cache_file=None,
+        github_token="token",
+    )
+
+    assert len(urls) == 2
+    mock_search.assert_called_once()
+    call_kwargs = mock_search.call_args.kwargs
+    assert call_kwargs["repos"] == ["owner/repo-a", "owner/repo-b"]
 
 
 @patch("cli.batch.search_closed_prs")
