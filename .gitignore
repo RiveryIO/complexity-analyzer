@@ -50,5 +50,6 @@ Thumbs.db
 
 # Results/data files
 *.csv
+*.png
 results/
 
