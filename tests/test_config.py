@@ -153,17 +153,6 @@ class TestGetAnthropicApiKey:
         """Test getting key from ANTHROPIC_API_KEY."""
         assert get_anthropic_api_key() == "sk-ant-test"
 
-    @patch.dict(os.environ, {"ANTROPIC_API_KEY": "sk-ant-typo"}, clear=True)
-    def test_antropic_typo_fallback(self):
-        """Test that ANTROPIC_API_KEY (typo) is supported."""
-        assert get_anthropic_api_key() == "sk-ant-typo"
-
-    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "correct", "ANTROPIC_API_KEY": "typo"}, clear=True)
-    def test_anthropic_takes_precedence_over_typo(self):
-        """Test that ANTHROPIC_API_KEY takes precedence over ANTROPIC_API_KEY."""
-        assert get_anthropic_api_key() == "correct"
-
-
 # AnalysisConfig validation tests
 
 

@@ -235,7 +235,7 @@ def _analyze_pr_impl(
             anthropic_key = get_anthropic_api_key()
             if not anthropic_key:
                 typer.echo(
-                    "Error: ANTHROPIC_API_KEY or ANTROPIC_API_KEY environment variable is required for anthropic provider",
+                    "Error: ANTHROPIC_API_KEY environment variable is required for anthropic provider",
                     err=True,
                 )
                 raise typer.Exit(1)
@@ -611,7 +611,7 @@ def batch_analyze(
             typer.echo("Set it with: export OPENAI_API_KEY='your-key'", err=True)
             raise typer.Exit(1)
         if provider == "anthropic" and not get_anthropic_api_key():
-            typer.echo("Error: ANTHROPIC_API_KEY or ANTROPIC_API_KEY is required for anthropic provider", err=True)
+            typer.echo("Error: ANTHROPIC_API_KEY is required for anthropic provider", err=True)
             raise typer.Exit(1)
         if provider == "bedrock":
             typer.echo("Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set.", err=True)
@@ -890,7 +890,7 @@ def label_pr(
             raise typer.Exit(1)
         if provider == "anthropic" and not get_anthropic_api_key():
             typer.echo(
-                "Error: ANTHROPIC_API_KEY or ANTROPIC_API_KEY is required for anthropic provider",
+                "Error: ANTHROPIC_API_KEY is required for anthropic provider",
                 err=True,
             )
             raise typer.Exit(1)

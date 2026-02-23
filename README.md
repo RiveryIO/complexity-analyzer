@@ -100,7 +100,7 @@ complexity-cli analyze-pr "https://github.com/owner/repo/pull/123"
 ### Environment Variables
 
 - `OPENAI_API_KEY` (required for `--provider openai`): OpenAI API key
-- `ANTHROPIC_API_KEY` or `ANTROPIC_API_KEY` (required for `--provider anthropic`): Anthropic API key
+- `ANTHROPIC_API_KEY` (required for `--provider anthropic`): Anthropic API key
 - `GH_TOKEN` or `GITHUB_TOKEN` (optional): GitHub API token for private repos or higher rate limits
 
 ### Anthropic Provider

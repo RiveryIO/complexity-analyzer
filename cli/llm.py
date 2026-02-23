@@ -189,7 +189,7 @@ def create_llm_provider(
         if not key:
             raise ValueError(
                 "Anthropic API key is required for anthropic provider. "
-                "Set ANTHROPIC_API_KEY or ANTROPIC_API_KEY in .env"
+                "Set ANTHROPIC_API_KEY in .env"
             )
         model_id = anthropic_model or DEFAULT_ANTHROPIC_MODEL
         return AnthropicProvider(key, model=model_id, timeout=timeout)

@@ -56,11 +56,8 @@ def get_openai_api_key() -> Optional[str]:
 
 
 def get_anthropic_api_key() -> Optional[str]:
-    """Get Anthropic API key from environment.
-
-    Checks ANTHROPIC_API_KEY first, then ANTROPIC_API_KEY (common typo).
-    """
-    return os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTROPIC_API_KEY")
+    """Get Anthropic API key from environment."""
+    return os.getenv("ANTHROPIC_API_KEY")
 
 
 def get_bedrock_config() -> tuple[str, str]:
