@@ -86,7 +86,8 @@ jobs:
       - name: Label PRs with complexity
         env:
           # Requires a PAT with repo scope and SSO authorization for the target org
-          GITHUB_TOKEN: ${{ secrets.ORG_GITHUB_TOKEN }}
+          # This is a personal token created by ohad to test the value of this workflow.
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
