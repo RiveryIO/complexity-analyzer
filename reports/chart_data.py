@@ -41,7 +41,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
         charts.append({
             "id": "01",
             "type": "bar",
-            "title": "Complexity Volume Over Time (by Week)",
+            "title": "Velocity Over Time (by Week)",
             "subtitle": "Total complexity per week",
             "x": labels,
             "y": weekly.tolist(),
@@ -54,7 +54,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
         charts.append({
             "id": "18",
             "type": "bar",
-            "title": "Complexity Volume by Month",
+            "title": "Velocity by Month",
             "subtitle": "Total complexity per month",
             "x": [str(p) for p in monthly.index],
             "y": monthly.tolist(),
@@ -68,7 +68,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
         charts.append({
             "id": "02",
             "type": "dualLine",
-            "title": "PR Count vs Complexity Over Time",
+            "title": "PR Count vs Velocity Over Time",
             "subtitle": "Volume vs total complexity",
             "x": labels,
             "y1": weekly_agg["pr_count"].tolist(),
@@ -192,8 +192,8 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
         charts.append({
             "id": "17",
             "type": "bar",
-            "title": "Complexity per Team per Developer",
-            "subtitle": "Output divided by headcount",
+            "title": "Velocity per Team per Developer",
+            "subtitle": "Complexity output divided by headcount",
             "x": normalized.index.tolist(),
             "y": normalized.tolist(),
         })
@@ -253,7 +253,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
             charts.append({
                 "id": f"05-{team}",
                 "type": "stackedBar",
-                "title": f"Developer Contribution — {team}",
+                "title": f"Developer Velocity — {team}",
                 "subtitle": "Complexity per week",
                 "x": weeks,
                 "series": series,
@@ -399,8 +399,8 @@ def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
             charts.append({
                 "id": "15",
                 "type": "multiLine",
-                "title": "Complexity Trend by Team (Rolling 4w)",
-                "subtitle": "Smoothed median per team",
+            "title": "Velocity Trend by Team (Rolling 4w)",
+            "subtitle": "Smoothed median complexity per team",
                 "x": x_labels,
                 "series": series_list,
             })
@@ -413,8 +413,8 @@ def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
         charts.append({
             "id": "16",
             "type": "area",
-            "title": "Cumulative Complexity Over Time",
-            "subtitle": "Running total",
+            "title": "Cumulative Velocity Over Time",
+            "subtitle": "Running total of complexity",
             "x": dates,
             "y": df_sorted["cumulative"].tolist(),
         })

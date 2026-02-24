@@ -37,14 +37,14 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
   <style>
     :root {{
-      --bg-deep: #0c0e12;
-      --bg-card: #14171e;
-      --bg-elevated: #1a1e28;
-      --border: #2a303c;
-      --text: #e8ecf2;
-      --text-muted: #8892a0;
-      --accent: #e8a838;
-      --accent-dim: rgba(232, 168, 56, 0.12);
+      --bg-deep: #f5f6f8;
+      --bg-card: #ffffff;
+      --bg-elevated: #f0f1f3;
+      --border: #e2e4e8;
+      --text: #1a1d24;
+      --text-muted: #6b7280;
+      --accent: #b45309;
+      --accent-dim: rgba(180, 83, 9, 0.12);
     }}
     * {{ box-sizing: border-box; }}
     body {{
@@ -80,7 +80,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
       overflow: hidden; padding: 1rem; transition: box-shadow 0.2s;
     }}
-    .chart-card:hover {{ box-shadow: 0 4px 20px rgba(0,0,0,0.25); }}
+    .chart-card:hover {{ box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
     .chart-card h3 {{ font-family: 'Syne', sans-serif; font-size: 0.95rem; font-weight: 600; margin: 0 0 0.25rem; }}
     .chart-card .sub {{ font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem; }}
     .chart-container {{ width: 100%; height: 320px; }}
@@ -101,21 +101,21 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced'];
     const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced' }};
 
-    const DARK_THEME = {{
+    const CHART_THEME = {{
       backgroundColor: 'transparent',
-      textStyle: {{ color: '#8892a0', fontFamily: 'IBM Plex Sans' }},
-      title: {{ textStyle: {{ color: '#e8ecf2' }}, subtextStyle: {{ color: '#8892a0' }} }},
-      legend: {{ textStyle: {{ color: '#8892a0' }} }},
-      axisLine: {{ lineStyle: {{ color: '#2a303c' }} }},
-      axisLabel: {{ color: '#8892a0' }},
-      splitLine: {{ lineStyle: {{ color: '#1a1e28' }} }},
+      textStyle: {{ color: '#6b7280', fontFamily: 'IBM Plex Sans' }},
+      title: {{ textStyle: {{ color: '#1a1d24' }}, subtextStyle: {{ color: '#6b7280' }} }},
+      legend: {{ textStyle: {{ color: '#6b7280' }} }},
+      axisLine: {{ lineStyle: {{ color: '#e2e4e8' }} }},
+      axisLabel: {{ color: '#6b7280' }},
+      splitLine: {{ lineStyle: {{ color: '#eef0f2' }} }},
     }};
 
-    const COLORS = ['#e8a838', '#5cb8b2', '#c97dd5', '#6b9bd1', '#e89b6f', '#8bc98a', '#d47070', '#9b9b9b'];
+    const COLORS = ['#b45309', '#0d9488', '#7c3aed', '#2563eb', '#ea580c', '#16a34a', '#dc2626', '#6b7280'];
 
     function renderBar(container, c) {{
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'axis' }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 60 }},
         xAxis: {{ type: 'category', data: c.x, axisLabel: {{ rotate: 45 }} }},
@@ -130,7 +130,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     function renderLine(container, c) {{
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'axis' }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 60 }},
         xAxis: {{ type: 'category', data: c.x, axisLabel: {{ rotate: 45 }} }},
@@ -145,7 +145,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     function renderDualLine(container, c) {{
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'axis' }},
         legend: {{ data: [c.y1Name, c.y2Name] }},
         grid: {{ left: 50, right: 50, top: 50, bottom: 60 }},
@@ -171,9 +171,22 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         itemStyle: {{ color: COLORS[i % COLORS.length] }},
       }}));
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'axis' }},
-        legend: {{ type: 'scroll', bottom: 0 }},
+        legend: {{
+          type: 'scroll',
+          bottom: 0,
+          selectedMode: 'single',
+          selector: true,
+          pageIconSize: 10,
+          pageTextStyle: {{ fontSize: 10 }},
+          pageFormatter: ({{ current, total }}) => `${{current}}/${{total}}`,
+          pageButtonItemGap: 4,
+          itemGap: 8,
+          itemWidth: 14,
+          itemHeight: 10,
+          textStyle: {{ fontSize: 10 }},
+        }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 80 }},
         xAxis: {{ type: 'category', data: c.x, axisLabel: {{ rotate: 45 }} }},
         yAxis: {{ type: 'value', minInterval: 0 }},
@@ -192,9 +205,22 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         itemStyle: {{ color: COLORS[i % COLORS.length] }},
       }}));
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'axis' }},
-        legend: {{ type: 'scroll', bottom: 0 }},
+        legend: {{
+          type: 'scroll',
+          bottom: 0,
+          selectedMode: 'single',
+          selector: true,
+          pageIconSize: 10,
+          pageTextStyle: {{ fontSize: 10 }},
+          pageFormatter: ({{ current, total }}) => `${{current}}/${{total}}`,
+          pageButtonItemGap: 4,
+          itemGap: 8,
+          itemWidth: 14,
+          itemHeight: 10,
+          textStyle: {{ fontSize: 10 }},
+        }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 80 }},
         xAxis: {{ type: 'category', data: c.x, axisLabel: {{ rotate: 45 }} }},
         yAxis: {{ type: 'value', minInterval: 0 }},
@@ -208,7 +234,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     function renderScatter(container, c) {{
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'item' }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 60 }},
         xAxis: {{ type: 'value', name: c.xAxisName || 'X' }},
@@ -224,7 +250,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     function renderScatterLabel(container, c) {{
       const data = (c.data || []).map(d => ({{ name: d.name, value: d.value }}));
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'item' }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 60 }},
         xAxis: {{ type: 'value', name: c.xAxisName || 'PR Count' }},
@@ -243,7 +269,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     function renderBoxplot(container, c) {{
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'item' }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 60 }},
         xAxis: {{ type: 'category', data: c.x, axisLabel: {{ rotate: 45 }} }},
@@ -258,7 +284,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     function renderArea(container, c) {{
       const opt = {{
-        ...DARK_THEME,
+        ...CHART_THEME,
         tooltip: {{ trigger: 'axis' }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 60 }},
         xAxis: {{ type: 'category', data: c.x, axisLabel: {{ rotate: 45 }} }},
