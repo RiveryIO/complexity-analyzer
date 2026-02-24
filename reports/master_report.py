@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 
 
 def _sort_paths(paths: List[str]) -> List[Path]:
-    """Sort paths: core first, then team (overview then by team), risk, fairness, advanced."""
+    """Sort paths: basic first, then team (overview then by team), risk, fairness, advanced."""
     def key(p: Path) -> tuple:
         parts = p.parts
-        if "core" in parts:
+        if "basic" in parts:
             return (0, str(p))
         if "team" in parts:
             if "overview" in parts:

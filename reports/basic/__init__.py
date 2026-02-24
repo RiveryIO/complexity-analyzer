@@ -1,4 +1,4 @@
-"""Core operational reports (1-3, 7)."""
+"""Basic operational reports (1-3, 7, 18, 19)."""
 
 from .reports import (
     report_avg_complexity_rolling,

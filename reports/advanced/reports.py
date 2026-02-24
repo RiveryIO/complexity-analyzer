@@ -19,6 +19,43 @@ def _ensure_date(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def report_developer_line_velocity(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
+    """Report: Developer Velocity by Week - one line per developer, x-axis = weeks."""
+    df = _ensure_date(df)
+    if df.empty:
+        return None
+    df = df.copy()
+    dev_col = "developer" if "developer" in df.columns else "author"
+    df["developer"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").astype(str)
+    df = df[df["developer"] != ""]
+    if df.empty:
+        return None
+    df["week"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
+    weekly = df.groupby(["week", "developer"])["complexity"].sum().unstack(fill_value=0)
+    if weekly.empty or weekly.shape[1] == 0:
+        return None
+    # Sort developers by total complexity (desc) for legend order
+    weekly = weekly.reindex(weekly.sum().sort_values(ascending=False).index, axis=1)
+    fig, ax = plt.subplots(figsize=(14, 7))
+    for col in weekly.columns:
+        ax.plot(weekly.index, weekly[col], label=col, alpha=0.8)
+    ax.set_title(
+        "Developer Velocity by Week\n"
+        "What: Complexity delivered per developer per week. When: Track individual output. How: Each line = one developer."
+    )
+    ax.set_ylabel("Complexity")
+    ax.set_xlabel("Week")
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", ncol=2, fontsize=8)
+    ax.tick_params(axis="x", rotation=45)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    ax.set_ylim(bottom=0)
+    fig.tight_layout()
+    out = output_dir / "21-developer-line-velocity.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return str(out) if validate_png_has_content(out) else None
+
+
 def report_complexity_trend_by_team(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
     """Report 15: Complexity Trend by Team - rolling median."""
     df = _ensure_date(df)

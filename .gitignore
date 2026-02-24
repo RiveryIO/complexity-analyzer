@@ -58,9 +58,11 @@ cache/
 
 # Reports output (generated charts, migration logs) - keep reports/*.py tracked
 reports/*.log
-reports/core/*.png
+reports/basic/*.png
 reports/team/**/*.png
 reports/risk/*.png
 reports/fairness/*.png
 reports/advanced/*.png
+reports/index.html
 
+.playwright-mcp/

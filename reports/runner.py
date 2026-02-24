@@ -65,12 +65,12 @@ def run_reports(
         return []
 
     if report_fns is None:
-        from reports.core import report_complexity_volume_by_month
-        from reports.core import report_complexity_volume_over_time
-        from reports.core import report_pr_count_vs_complexity
-        from reports.core import report_avg_complexity_rolling
-        from reports.core import report_avg_merge_cycle_time
-        from reports.core import report_high_complexity_frequency
+        from reports.basic import report_complexity_volume_by_month
+        from reports.basic import report_complexity_volume_over_time
+        from reports.basic import report_pr_count_vs_complexity
+        from reports.basic import report_avg_complexity_rolling
+        from reports.basic import report_avg_merge_cycle_time
+        from reports.basic import report_high_complexity_frequency
         from reports.team import report_complexity_distribution_by_team
         from reports.team import report_developer_contribution
         from reports.team import report_complexity_per_dev_vs_pr_count
@@ -84,14 +84,15 @@ def run_reports(
         from reports.fairness import report_pr_count_vs_avg_complexity
         from reports.advanced import report_complexity_trend_by_team
         from reports.advanced import report_cumulative_complexity
+        from reports.advanced import report_developer_line_velocity
 
         report_fns = [
-            (report_complexity_volume_over_time, "core"),
-            (report_complexity_volume_by_month, "core"),
-            (report_pr_count_vs_complexity, "core"),
-            (report_avg_complexity_rolling, "core"),
-            (report_avg_merge_cycle_time, "core"),
-            (report_high_complexity_frequency, "core"),
+            (report_complexity_volume_over_time, "basic"),
+            (report_complexity_volume_by_month, "basic"),
+            (report_pr_count_vs_complexity, "basic"),
+            (report_avg_complexity_rolling, "basic"),
+            (report_avg_merge_cycle_time, "basic"),
+            (report_high_complexity_frequency, "basic"),
             (report_complexity_distribution_by_team, "team"),
             (report_developer_contribution, "team"),
             (report_complexity_per_dev_vs_pr_count, "team"),
@@ -105,6 +106,7 @@ def run_reports(
             (report_pr_count_vs_avg_complexity, "fairness"),
             (report_complexity_trend_by_team, "advanced"),
             (report_cumulative_complexity, "advanced"),
+            (report_developer_line_velocity, "advanced"),
         ]
     else:
         # Normalize: (fn, subdir) or plain fn -> (fn, ".")
@@ -144,5 +146,12 @@ def run_reports(
         master_path = build_master_report(generated, output_dir)
         if master_path:
             generated.append(master_path)
+
+    # Build interactive HTML report (tabbed dashboard + D3 developer velocity)
+    from reports.interactive_report import build_interactive_report
+
+    interactive_path = build_interactive_report(df, output_dir, generated_paths=generated)
+    if interactive_path:
+        generated.append(interactive_path)
 
     return generated
