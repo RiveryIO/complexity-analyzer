@@ -19,36 +19,6 @@ def _ensure_date(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def report_complexity_weighted_velocity(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
-    """Report 13: Complexity Weighted Velocity - per sprint, total_complexity / #developers."""
-    df = _ensure_date(df)
-    if df.empty:
-        return None
-    df = df.copy()
-    df["sprint"] = pd.to_datetime(df["date"]).dt.to_period("2W").dt.start_time
-    sprint_total = df.groupby("sprint")["complexity"].sum()
-    dev_col = "developer" if "developer" in df.columns else "author"
-    sprint_devs = df.groupby("sprint")[dev_col].nunique().replace(0, 1)
-    velocity = (sprint_total / sprint_devs).sort_index()
-    if not has_plottable_series(velocity):
-        return None
-    fig, ax = plt.subplots(figsize=(12, 6))
-    velocity.index = pd.to_datetime(velocity.index).strftime("%Y-%m-%d")
-    velocity.plot(kind="bar", ax=ax, color="green", alpha=0.8)
-    ax.set_title(
-        "Complexity Weighted Velocity (per Sprint, per Developer)\n"
-        "What: Output per sprint normalized by headcount. When: Sprint reviews. How: Compare bars for velocity trends."
-    )
-    ax.set_ylabel("Complexity / #developers")
-    ax.set_xlabel("Sprint")
-    ax.tick_params(axis="x", rotation=45)
-    fig.tight_layout()
-    out = output_dir / "13-complexity-weighted-velocity.png"
-    fig.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return str(out) if validate_png_has_content(out) else None
-
-
 def report_complexity_trend_by_team(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
     """Report 15: Complexity Trend by Team - rolling median."""
     df = _ensure_date(df)

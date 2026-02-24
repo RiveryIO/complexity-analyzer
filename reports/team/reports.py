@@ -63,7 +63,7 @@ def report_complexity_distribution_by_team(df: pd.DataFrame, output_dir: Path) -
 
 
 def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optional[Union[str, List[str]]]:
-    """Report 5: Developer Complexity Contribution - stacked by sprint, one per team."""
+    """Report 5: Developer Complexity Contribution - stacked by week, one per team."""
     mapping = load_team_mapping()
     if not mapping:
         return None
@@ -78,12 +78,12 @@ def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optiona
     df = df[df["developer"] != ""]
     if df.empty:
         return None
-    df["sprint"] = pd.to_datetime(df["date"]).dt.to_period("2W").dt.start_time
+    df["week"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
     generated = []
     for team in df["team"].unique():
         tdf = df[df["team"] == team]
         pivot = tdf.pivot_table(
-            index="sprint", columns="developer", values="complexity", aggfunc="sum", fill_value=0
+            index="week", columns="developer", values="complexity", aggfunc="sum", fill_value=0
         )
         pivot = pivot.reindex(pivot.sum().sort_values(ascending=False).index, axis=1)
         if not has_plottable_agg(pivot):
@@ -92,11 +92,11 @@ def report_developer_contribution(df: pd.DataFrame, output_dir: Path) -> Optiona
         fig, ax = plt.subplots(figsize=(12, 6))
         pivot.plot(kind="bar", stacked=True, ax=ax, width=0.8, legend=True)
         ax.set_title(
-            f"Developer Complexity Contribution — {team} (per Sprint)\n"
-            "What: Who delivered what per sprint. When: Sprint reviews. How: Compare stacked bars."
+            f"Developer Complexity Contribution — {team} (per Week)\n"
+            "What: Who delivered what per week. When: Weekly reviews. How: Compare stacked bars."
         )
         ax.set_ylabel("Complexity")
-        ax.set_xlabel("Sprint")
+        ax.set_xlabel("Week")
         ax.tick_params(axis="x", rotation=45)
         ax.legend(bbox_to_anchor=(1.02, 1), ncol=2)
         fig.tight_layout()

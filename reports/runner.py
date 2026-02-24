@@ -82,7 +82,6 @@ def run_reports(
         from reports.risk import report_complexity_histogram
         from reports.fairness import report_pr_size_vs_complexity
         from reports.fairness import report_pr_count_vs_avg_complexity
-        from reports.advanced import report_complexity_weighted_velocity
         from reports.advanced import report_complexity_trend_by_team
         from reports.advanced import report_cumulative_complexity
 
@@ -104,7 +103,6 @@ def run_reports(
             (report_complexity_histogram, "risk"),
             (report_pr_size_vs_complexity, "fairness"),
             (report_pr_count_vs_avg_complexity, "fairness"),
-            (report_complexity_weighted_velocity, "advanced"),
             (report_complexity_trend_by_team, "advanced"),
             (report_cumulative_complexity, "advanced"),
         ]

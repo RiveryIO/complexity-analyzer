@@ -596,6 +596,9 @@ def batch_analyze(
     overwrite: bool = typer.Option(
         False, "--overwrite", "--full-sync", help="Ignore existing CSV; fetch full date range (default: incremental fetch from latest CSV data)"
     ),
+    fetch_only: bool = typer.Option(
+        False, "--fetch-only", help="Only fetch PR URLs to cache; skip analysis and labeling"
+    ),
 ):
     """
     Batch analyze multiple PRs from a file or date range.
@@ -647,26 +650,26 @@ def batch_analyze(
             )
             raise typer.Exit(1)
 
-        # Require output_file unless --label is used
-        if not label and not output_file:
-            typer.echo("Error: --output is required unless --label is used", err=True)
+        # Require output_file unless --label or --fetch-only is used
+        if not label and not output_file and not fetch_only:
+            typer.echo("Error: --output is required unless --label or --fetch-only is used", err=True)
             raise typer.Exit(1)
 
         # When labeling, default to writing CSV as well (override with --output)
         if label and not output_file:
             output_file = Path("complexity-report.csv")
 
-        # Get credentials
-        openai_key = get_openai_api_key()
+        # Get credentials (skip LLM keys when fetch-only)
+        openai_key = get_openai_api_key() if not fetch_only else None
 
-        if provider == "openai" and not openai_key:
+        if not fetch_only and provider == "openai" and not openai_key:
             typer.echo("Error: OPENAI_API_KEY environment variable is required for openai provider", err=True)
             typer.echo("Set it with: export OPENAI_API_KEY='your-key'", err=True)
             raise typer.Exit(1)
-        if provider == "anthropic" and not get_anthropic_api_key():
+        if not fetch_only and provider == "anthropic" and not get_anthropic_api_key():
             typer.echo("Error: ANTHROPIC_API_KEY is required for anthropic provider", err=True)
             raise typer.Exit(1)
-        if provider == "bedrock":
+        if not fetch_only and provider == "bedrock":
             typer.echo("Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set.", err=True)
 
         # Get GitHub tokens - CLI option takes precedence over environment
@@ -711,12 +714,15 @@ def batch_analyze(
                 err=True,
             )
 
-        # Load prompt
-        try:
-            prompt_text = load_prompt(prompt_file)
-        except FileNotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(1)
+        # Load prompt (skip when fetch-only)
+        if not fetch_only:
+            try:
+                prompt_text = load_prompt(prompt_file)
+            except FileNotFoundError as e:
+                typer.echo(f"Error: {e}", err=True)
+                raise typer.Exit(1)
+        else:
+            prompt_text = None
 
         # Get PR URLs
         if input_file:
@@ -784,6 +790,14 @@ def batch_analyze(
                     sleep_seconds=sleep_seconds,
                     since_override=since_override,
                 )
+
+        # Fetch-only mode: save to cache and exit
+        if fetch_only:
+            if not cache_file:
+                typer.echo("Error: --cache is required with --fetch-only", err=True)
+                raise typer.Exit(1)
+            typer.echo(f"✓ Fetched {len(pr_urls)} PR URLs to cache: {cache_file}", err=True)
+            return
 
         # Create analyzer function with progress callback
         def progress_msg(msg: str) -> None:
