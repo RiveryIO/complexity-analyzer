@@ -137,4 +137,12 @@ def run_reports(
                 else:
                     generated.append(result)
 
+    # Build master composite from all generated PNGs (reuses outputs, no code duplication)
+    if generated:
+        from reports.master_report import build_master_report
+
+        master_path = build_master_report(generated, output_dir)
+        if master_path:
+            generated.append(master_path)
+
     return generated
