@@ -45,6 +45,7 @@ on:
 
 jobs:
   label-prs:
+    if: false  # Disabled
     runs-on: ubuntu-latest
 
     steps:
