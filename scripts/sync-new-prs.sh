@@ -35,7 +35,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-mkdir -p logs
+BACKUP_DIR="backups"
+BACKUP_RETENTION_DAYS=7
+
+mkdir -p logs "$BACKUP_DIR"
+
+# Backup CSV before any changes
+if [[ -f "$CSV_FILE" ]]; then
+    BACKUP_FILE="$BACKUP_DIR/complexity-report-$(date +%Y%m%d-%H%M%S).csv"
+    cp "$CSV_FILE" "$BACKUP_FILE"
+    echo "Backup: $BACKUP_FILE"
+fi
+
+# Prune backups older than retention period
+find "$BACKUP_DIR" -name "complexity-report-*.csv" -mtime +$BACKUP_RETENTION_DAYS -delete 2>/dev/null || true
 
 echo "=== PR Complexity Sync ===" | tee -a "$LOG_FILE"
 echo "Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$LOG_FILE"
