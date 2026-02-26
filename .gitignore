@@ -53,6 +53,9 @@ Thumbs.db
 *.png
 results/
 
+# Sync logs
+logs/
+
 # Fetch cache (repos list, PR URLs)
 cache/
 

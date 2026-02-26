@@ -539,6 +539,7 @@ def get_max_merged_at_from_csv(csv_path: Optional[Path]) -> Optional[datetime]:
                     if val.endswith("Z"):
                         val = val[:-1] + "+00:00"
                     dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                    dt = dt.replace(tzinfo=None)
                     if max_dt is None or dt > max_dt:
                         max_dt = dt
                 except (ValueError, TypeError):
