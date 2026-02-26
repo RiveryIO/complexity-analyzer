@@ -19,15 +19,21 @@ def _parse_team_assignments_text(content: str) -> Dict[str, str]:
         dave eve
     """
     result: Dict[str, str] = {}
-    # Match [TeamName] and capture team name; everything until next [ or EOL is developers
-    pattern = re.compile(r"\[([^\]]+)\]\s*([^[]*)")
-    for match in pattern.finditer(content):
-        team = match.group(1).strip()
-        developers = match.group(2).split()
-        for dev in developers:
-            dev = dev.strip()
-            if dev and not dev.startswith("#"):
-                result[dev] = team
+    current_team: Optional[str] = None
+    team_header = re.compile(r"^\[([^\]]+)\]\s*$")
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = team_header.match(line)
+        if m:
+            current_team = m.group(1).strip()
+            continue
+        if current_team:
+            for dev in line.split():
+                dev = dev.strip()
+                if dev:
+                    result[dev] = current_team
     return result
 
 
