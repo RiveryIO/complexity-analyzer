@@ -372,7 +372,15 @@ def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
         weekly = weekly.reindex(weekly.sum().sort_values(ascending=False).index, axis=1)
         if not weekly.empty:
             weeks = [d.strftime("%Y-%m-%d") for d in weekly.index]
-            series = [{"name": c, "data": weekly[c].tolist()} for c in weekly.columns]
+            mapping = load_team_mapping()
+            series = [
+                {
+                    "name": c,
+                    "data": weekly[c].tolist(),
+                    "team": mapping.get(c, ""),
+                }
+                for c in weekly.columns
+            ]
             charts.append({
                 "id": "21",
                 "type": "multiLine",
@@ -380,6 +388,7 @@ def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "subtitle": "Complexity per developer per week",
                 "x": weeks,
                 "series": series,
+                "hasPicker": True,
             })
 
     # 15: Complexity trend by team (multi-line)
@@ -405,18 +414,20 @@ def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "series": series_list,
             })
 
-    # 16: Cumulative complexity (area/line)
-    df_sorted = df.sort_values("date")
-    df_sorted["cumulative"] = df_sorted["complexity"].cumsum()
-    if not df_sorted["cumulative"].empty:
-        dates = pd.to_datetime(df_sorted["date"]).dt.strftime("%Y-%m-%d").tolist()
+    # 16: Cumulative complexity by week (area/line)
+    df_cum = df.copy()
+    df_cum["week"] = pd.to_datetime(df_cum["date"]).dt.to_period("W").dt.start_time
+    weekly_sum = df_cum.groupby("week")["complexity"].sum().sort_index()
+    cumulative = weekly_sum.cumsum()
+    if not cumulative.empty:
+        weeks = [d.strftime("%Y-%m-%d") for d in cumulative.index]
         charts.append({
             "id": "16",
             "type": "area",
             "title": "Cumulative Velocity Over Time",
-            "subtitle": "Running total of complexity",
-            "x": dates,
-            "y": df_sorted["cumulative"].tolist(),
+            "subtitle": "Running total of complexity (by week)",
+            "x": weeks,
+            "y": cumulative.tolist(),
         })
 
     return charts
