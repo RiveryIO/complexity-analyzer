@@ -1,8 +1,6 @@
 """Tests for report validation helpers."""
 
-import pytest
 import pandas as pd
-from pathlib import Path
 
 from reports.validation import (
     MIN_PNG_SIZE_BYTES,

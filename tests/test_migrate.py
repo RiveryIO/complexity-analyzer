@@ -2,8 +2,7 @@
 
 import csv
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from cli.migrate import run_migration, _load_csv_rows, _needs_enrichment
 

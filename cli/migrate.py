@@ -26,7 +26,6 @@ def _load_csv_rows(path: Path) -> List[Dict[str, str]]:
         return rows
     with path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        fieldnames = reader.fieldnames or []
         for row in reader:
             normalized: Dict[str, str] = {}
             pr_url = (

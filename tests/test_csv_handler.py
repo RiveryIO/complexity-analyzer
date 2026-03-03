@@ -1,8 +1,6 @@
 """Tests for CSV handler module."""
 
 import csv
-import pytest
-from pathlib import Path
 
 from cli.csv_handler import (
     CSV_FIELDNAMES,

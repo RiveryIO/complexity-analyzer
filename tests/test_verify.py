@@ -1,7 +1,5 @@
 """Tests for verify-settings module."""
 
-import pytest
-from pathlib import Path
 
 from cli.verify import run_verify_settings
 

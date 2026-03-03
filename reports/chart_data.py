@@ -1,6 +1,6 @@
 """Export all report data as JSON for dynamic ECharts rendering. Reuses report logic."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd

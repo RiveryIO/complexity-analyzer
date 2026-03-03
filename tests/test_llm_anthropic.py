@@ -1,10 +1,9 @@
 """Tests for Anthropic LLM provider."""
 
-import pytest
 from unittest.mock import patch, MagicMock
 
 from cli.llm_anthropic import AnthropicProvider
-from cli.llm_base import LLMProvider, LLMError
+from cli.llm_base import LLMProvider
 
 
 class TestAnthropicProviderBase:
