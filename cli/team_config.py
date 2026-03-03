@@ -20,7 +20,7 @@ def _parse_team_assignments_text(content: str) -> Dict[str, str]:
     """
     result: Dict[str, str] = {}
     current_team: Optional[str] = None
-    team_header = re.compile(r"^\[([^\]]+)\]\s*$")
+    team_header = re.compile(r"^\[([^\]]+)\]\s*(.*)$")
     for line in content.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
@@ -28,6 +28,12 @@ def _parse_team_assignments_text(content: str) -> Dict[str, str]:
         m = team_header.match(line)
         if m:
             current_team = m.group(1).strip()
+            rest = m.group(2).strip()
+            if rest and current_team:
+                for dev in rest.split():
+                    dev = dev.strip()
+                    if dev:
+                        result[dev] = current_team
             continue
         if current_team:
             for dev in line.split():
