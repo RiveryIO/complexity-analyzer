@@ -30,7 +30,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Engineering Intelligence — Complexity Analyzer</title>
+  <title>Engineering Velocity — Complexity Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
@@ -257,8 +257,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <header>
       <div class="header-row">
         <div class="header-text">
-          <h1>Engineering Intelligence</h1>
-          <p class="subtitle">Complexity Analyzer — Dynamic charts</p>
+          <h1>Engineering Velocity</h1>
+          <p class="subtitle">Automatic PR complexity analyzer</p>
         </div>
         <div class="global-search" id="global-search">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
