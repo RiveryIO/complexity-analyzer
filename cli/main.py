@@ -465,10 +465,14 @@ def analyze_pr(
     github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     provider: Optional[str] = typer.Option(
-        None, "--provider", help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)"
+        None,
+        "--provider",
+        help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)",
     ),
     bedrock_model: Optional[str] = typer.Option(
-        None, "--bedrock-model", help="Bedrock model ID (e.g. anthropic.claude-sonnet-4-5-20250929-v1:0)"
+        None,
+        "--bedrock-model",
+        help="Bedrock model ID (e.g. anthropic.claude-sonnet-4-5-20250929-v1:0)",
     ),
     bedrock_region: Optional[str] = typer.Option(
         None, "--bedrock-region", help="AWS region for Bedrock (default: AWS_REGION or us-east-1)"
@@ -518,10 +522,15 @@ def batch_analyze(
         None, "--input-file", "-i", help="File containing PR URLs (one per line)"
     ),
     repos_file: Optional[Path] = typer.Option(
-        None, "--repos-file", "-r", help="File containing repo names (owner/repo per line) for date range search"
+        None,
+        "--repos-file",
+        "-r",
+        help="File containing repo names (owner/repo per line) for date range search",
     ),
     all_repos: bool = typer.Option(
-        False, "--all-repos", help="Dynamically scan all repos the authenticated user has access to (use with --since/--until or --days)"
+        False,
+        "--all-repos",
+        help="Dynamically scan all repos the authenticated user has access to (use with --since/--until or --days)",
     ),
     org: Optional[str] = typer.Option(
         None, "--org", help="Organization name (for date range search)"
@@ -533,7 +542,10 @@ def batch_analyze(
         None, "--until", help="End date (YYYY-MM-DD) for date range search"
     ),
     days: Optional[int] = typer.Option(
-        None, "--days", "-d", help="Shortcut: last N days (e.g. --days 5 for last 5 days). Use with --all-repos."
+        None,
+        "--days",
+        "-d",
+        help="Shortcut: last N days (e.g. --days 5 for last 5 days). Use with --all-repos.",
     ),
     output_file: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output CSV file path (required unless --label is used)"
@@ -579,11 +591,11 @@ def batch_analyze(
         "Can also be set via GH_TOKENS or GITHUB_TOKENS environment variables.",
     ),
     provider: Optional[str] = typer.Option(
-        None, "--provider", help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)"
+        None,
+        "--provider",
+        help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)",
     ),
-    bedrock_model: Optional[str] = typer.Option(
-        None, "--bedrock-model", help="Bedrock model ID"
-    ),
+    bedrock_model: Optional[str] = typer.Option(None, "--bedrock-model", help="Bedrock model ID"),
     bedrock_region: Optional[str] = typer.Option(
         None, "--bedrock-region", help="AWS region for Bedrock"
     ),
@@ -594,7 +606,10 @@ def batch_analyze(
         None, "--limit", "-n", help="Maximum number of PRs to process (e.g. --limit 10)"
     ),
     overwrite: bool = typer.Option(
-        False, "--overwrite", "--full-sync", help="Ignore existing CSV; fetch full date range (default: incremental fetch from latest CSV data)"
+        False,
+        "--overwrite",
+        "--full-sync",
+        help="Ignore existing CSV; fetch full date range (default: incremental fetch from latest CSV data)",
     ),
     fetch_only: bool = typer.Option(
         False, "--fetch-only", help="Only fetch PR URLs to cache; skip analysis and labeling"
@@ -637,13 +652,24 @@ def batch_analyze(
             raise typer.Exit(1)
 
         if sum(bool(x) for x in [org, repos_file, all_repos]) > 1:
-            typer.echo("Error: Cannot specify more than one of --org, --repos-file, --all-repos", err=True)
+            typer.echo(
+                "Error: Cannot specify more than one of --org, --repos-file, --all-repos", err=True
+            )
             raise typer.Exit(1)
 
         has_date_range = org and (bool(since and until) or (days is not None and days > 0))
-        has_repos_date_range = repos_file and (bool(since and until) or (days is not None and days > 0))
-        has_all_repos_date_range = all_repos and (bool(since and until) or (days is not None and days > 0))
-        if not input_file and not has_date_range and not has_repos_date_range and not has_all_repos_date_range:
+        has_repos_date_range = repos_file and (
+            bool(since and until) or (days is not None and days > 0)
+        )
+        has_all_repos_date_range = all_repos and (
+            bool(since and until) or (days is not None and days > 0)
+        )
+        if (
+            not input_file
+            and not has_date_range
+            and not has_repos_date_range
+            and not has_all_repos_date_range
+        ):
             typer.echo(
                 "Error: Must specify either --input-file OR (--org, --since/--until or --days) OR (--repos-file, --since/--until or --days) OR (--all-repos, --since/--until or --days)",
                 err=True,
@@ -652,7 +678,9 @@ def batch_analyze(
 
         # Require output_file unless --label or --fetch-only is used
         if not label and not output_file and not fetch_only:
-            typer.echo("Error: --output is required unless --label or --fetch-only is used", err=True)
+            typer.echo(
+                "Error: --output is required unless --label or --fetch-only is used", err=True
+            )
             raise typer.Exit(1)
 
         # When labeling, default to writing CSV as well (override with --output)
@@ -663,14 +691,19 @@ def batch_analyze(
         openai_key = get_openai_api_key() if not fetch_only else None
 
         if not fetch_only and provider == "openai" and not openai_key:
-            typer.echo("Error: OPENAI_API_KEY environment variable is required for openai provider", err=True)
+            typer.echo(
+                "Error: OPENAI_API_KEY environment variable is required for openai provider",
+                err=True,
+            )
             typer.echo("Set it with: export OPENAI_API_KEY='your-key'", err=True)
             raise typer.Exit(1)
         if not fetch_only and provider == "anthropic" and not get_anthropic_api_key():
             typer.echo("Error: ANTHROPIC_API_KEY is required for anthropic provider", err=True)
             raise typer.Exit(1)
         if not fetch_only and provider == "bedrock":
-            typer.echo("Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set.", err=True)
+            typer.echo(
+                "Using Bedrock provider. Ensure AWS_PROFILE and AWS_REGION are set.", err=True
+            )
 
         # Get GitHub tokens - CLI option takes precedence over environment
         token_list: List[str] = []
@@ -758,7 +791,10 @@ def batch_analyze(
 
             if all_repos:
                 if not github_token:
-                    typer.echo("Error: GitHub token required for --all-repos. Set GH_TOKEN or run `gh auth login`", err=True)
+                    typer.echo(
+                        "Error: GitHub token required for --all-repos. Set GH_TOKEN or run `gh auth login`",
+                        err=True,
+                    )
                     raise typer.Exit(1)
                 pr_urls = generate_pr_list_from_all_repos(
                     since=since_dt,
@@ -887,7 +923,10 @@ def export_labels(
         DEFAULT_SLEEP_SECONDS, "--sleep-seconds", help="Sleep between GitHub API calls"
     ),
     overwrite: bool = typer.Option(
-        False, "--overwrite", "--full-sync", help="Ignore existing CSV; fetch full date range (default: incremental fetch from latest CSV data)"
+        False,
+        "--overwrite",
+        "--full-sync",
+        help="Ignore existing CSV; fetch full date range (default: incremental fetch from latest CSV data)",
     ),
 ):
     """
@@ -921,7 +960,9 @@ def export_labels(
 
         github_token = get_github_token()
         if not github_token:
-            typer.echo("Error: GitHub token required. Set GH_TOKEN or run `gh auth login`", err=True)
+            typer.echo(
+                "Error: GitHub token required. Set GH_TOKEN or run `gh auth login`", err=True
+            )
             raise typer.Exit(1)
 
         if input_file:
@@ -1026,9 +1067,7 @@ def export_labels(
 
 @app.command(name="generate-reports")
 def generate_reports(
-    csv_path: Path = typer.Option(
-        "complexity-report.csv", "--input", "-i", help="Input CSV path"
-    ),
+    csv_path: Path = typer.Option("complexity-report.csv", "--input", "-i", help="Input CSV path"),
     output_dir: Path = typer.Option(
         "reports", "--output", "-o", help="Output directory for report images"
     ),
@@ -1065,7 +1104,10 @@ def migrate_csv(
         "complexity-report.csv", "--output", "-o", help="Output CSV path (can be same as input)"
     ),
     background: bool = typer.Option(
-        False, "--background", "-b", help="Run migration in background, log to reports/migration.log"
+        False,
+        "--background",
+        "-b",
+        help="Run migration in background, log to reports/migration.log",
     ),
     sleep_seconds: float = typer.Option(
         DEFAULT_SLEEP_SECONDS, "--sleep-seconds", help="Sleep between GitHub API calls"
@@ -1082,7 +1124,9 @@ def migrate_csv(
 
         github_token = get_github_token()
         if not github_token:
-            typer.echo("Warning: GH_TOKEN not set. GitHub API calls may fail for private repos.", err=True)
+            typer.echo(
+                "Warning: GH_TOKEN not set. GitHub API calls may fail for private repos.", err=True
+            )
 
         if background:
             pid = run_migration_background(
@@ -1123,9 +1167,7 @@ def verify_settings(
     csv_path: Optional[Path] = typer.Option(
         None, "--csv", "-c", help="Path to complexity CSV (default: complexity-report.csv)"
     ),
-    csv_required: bool = typer.Option(
-        False, "--csv-required", help="Fail when CSV is missing"
-    ),
+    csv_required: bool = typer.Option(False, "--csv-required", help="Fail when CSV is missing"),
 ):
     """
     Verify settings required to pull data and generate reports.
@@ -1150,7 +1192,10 @@ def verify_settings(
 
         failed = sum(1 for _, ok, _ in results if not ok)
         if failed > 0:
-            typer.echo(f"{failed} check(s) failed. Fix missing settings before running batch-analyze or generate-reports.", err=True)
+            typer.echo(
+                f"{failed} check(s) failed. Fix missing settings before running batch-analyze or generate-reports.",
+                err=True,
+            )
             raise typer.Exit(1)
     except typer.Exit:
         raise
@@ -1244,11 +1289,11 @@ def label_pr(
     openai_api_key: Optional[str] = typer.Option(None, "--openai-api-key", help="OpenAI API key"),
     github_token: Optional[str] = typer.Option(None, "--github-token", help="GitHub token"),
     provider: Optional[str] = typer.Option(
-        None, "--provider", help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)"
+        None,
+        "--provider",
+        help="LLM provider: openai, anthropic, or bedrock (auto-detected from .env if not set)",
     ),
-    bedrock_model: Optional[str] = typer.Option(
-        None, "--bedrock-model", help="Bedrock model ID"
-    ),
+    bedrock_model: Optional[str] = typer.Option(None, "--bedrock-model", help="Bedrock model ID"),
     bedrock_region: Optional[str] = typer.Option(
         None, "--bedrock-region", help="AWS region for Bedrock"
     ),

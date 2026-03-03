@@ -40,7 +40,9 @@ class TestAnthropicProviderAnalyzeComplexity:
     def test_analyze_complexity_success(self, mock_anthropic_class):
         """Test successful complexity analysis."""
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"complexity": 5, "explanation": "Medium complexity"}')]
+        mock_response.content = [
+            MagicMock(text='{"complexity": 5, "explanation": "Medium complexity"}')
+        ]
         mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
 
         mock_client = MagicMock()

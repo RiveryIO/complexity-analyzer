@@ -36,9 +36,7 @@ def _load_csv_rows(path: Path) -> List[Dict[str, str]]:
             )
             normalized["pr_url"] = str(pr_url or "").strip()
             normalized["complexity"] = str(row.get("complexity") or "").strip()
-            normalized["developer"] = str(
-                row.get("developer") or row.get("author") or ""
-            ).strip()
+            normalized["developer"] = str(row.get("developer") or row.get("author") or "").strip()
             normalized["date"] = str(row.get("date") or "").strip()
             normalized["team"] = str(row.get("team") or "").strip()
             normalized["merged_at"] = str(row.get("merged_at") or "").strip()
@@ -82,6 +80,7 @@ def run_migration(
     Returns:
         Number of rows enriched
     """
+
     def log(msg: str) -> None:
         if progress_callback:
             progress_callback(msg)
@@ -122,7 +121,9 @@ def run_migration(
                 timeout=DEFAULT_TIMEOUT,
             )
             meta = fetch_pr_metadata(
-                owner, repo, int(pr),
+                owner,
+                repo,
+                int(pr),
                 token=token,
                 timeout=DEFAULT_TIMEOUT,
                 check_rate_limit_first=False,
@@ -192,9 +193,14 @@ def run_migration_background(
         env["GH_TOKEN"] = token
 
     cmd = [
-        sys.executable, "-m", "cli.main", "migrate-csv",
-        "--input", str(input_path),
-        "--output", str(output_path),
+        sys.executable,
+        "-m",
+        "cli.main",
+        "migrate-csv",
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
     ]
 
     with log_file.open("a", encoding="utf-8") as log_handle:

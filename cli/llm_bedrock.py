@@ -99,9 +99,7 @@ class BedrockProvider(LLMProvider):
             f"diff_excerpt:\n{diff_excerpt}\n\nstats_json:\n{stats_json}\n\ntitle:\n{title}"
         )
 
-        json_instruction = (
-            "\n\nRespond with ONLY a valid JSON object: {\"complexity\": <int 1-10>, \"explanation\": \"<string>\"}"
-        )
+        json_instruction = '\n\nRespond with ONLY a valid JSON object: {"complexity": <int 1-10>, "explanation": "<string>"}'
 
         messages = [
             {"role": "user", "content": [{"text": user_content}]},
@@ -114,7 +112,9 @@ class BedrockProvider(LLMProvider):
                 kwargs: Dict[str, Any] = {
                     "modelId": self._model,
                     "messages": messages,
-                    "system": [{"text": prompt + ("" if use_structured_output else json_instruction)}],
+                    "system": [
+                        {"text": prompt + ("" if use_structured_output else json_instruction)}
+                    ],
                     "inferenceConfig": {
                         "maxTokens": 2048,
                         "temperature": 0.0,

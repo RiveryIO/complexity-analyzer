@@ -975,7 +975,9 @@ def update_complexity_label(
 
     # Post explanation as comment if provided
     if explanation and explanation.strip():
-        comment_body = f"## Complexity Analysis\n\n**Score:** {complexity}/10\n\n{explanation.strip()}"
+        comment_body = (
+            f"## Complexity Analysis\n\n**Score:** {complexity}/10\n\n{explanation.strip()}"
+        )
         add_pr_comment(owner, repo, pr, comment_body, token, timeout)
 
     return new_label
@@ -1123,9 +1125,7 @@ def list_user_repos(
                             # Parse ISO format
                             if pushed_at.endswith("Z"):
                                 pushed_at = pushed_at[:-1] + "+00:00"
-                            dt = datetime.fromisoformat(
-                                pushed_at.replace("Z", "+00:00")
-                            )
+                            dt = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
                             # Make pushed_since timezone-aware for comparison
                             since_aware = (
                                 pushed_since

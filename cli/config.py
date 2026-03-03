@@ -19,6 +19,7 @@ def get_github_token() -> Optional[str]:
     # Fallback: use GitHub CLI token (has SSO auth for orgs)
     try:
         import subprocess
+
         result = subprocess.run(
             ["gh", "auth", "token"],
             capture_output=True,
@@ -117,11 +118,7 @@ def get_bedrock_config() -> tuple[str, str]:
     """
     from .constants import DEFAULT_BEDROCK_MODEL
 
-    region = (
-        os.getenv("BEDROCK_REGION")
-        or os.getenv("AWS_REGION")
-        or "us-east-1"
-    )
+    region = os.getenv("BEDROCK_REGION") or os.getenv("AWS_REGION") or "us-east-1"
     model_id = os.getenv("BEDROCK_MODEL_ID") or DEFAULT_BEDROCK_MODEL
     return (region, model_id)
 

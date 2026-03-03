@@ -26,8 +26,7 @@ def test_load_csv_rows_legacy(tmp_path):
     """Test loading legacy CSV (author instead of developer)."""
     csv_file = tmp_path / "legacy.csv"
     csv_file.write_text(
-        "pr_url,complexity,explanation,author\n"
-        "https://github.com/org/repo/pull/1,5,Test,alice\n"
+        "pr_url,complexity,explanation,author\n" "https://github.com/org/repo/pull/1,5,Test,alice\n"
     )
     rows = _load_csv_rows(csv_file)
     assert len(rows) == 1
@@ -36,9 +35,24 @@ def test_load_csv_rows_legacy(tmp_path):
 
 def test_needs_enrichment():
     """Test _needs_enrichment logic."""
-    assert _needs_enrichment({"merged_at": "", "created_at": "", "lines_added": "", "lines_deleted": ""}) is True
-    assert _needs_enrichment({"merged_at": "x", "created_at": "x", "lines_added": "10", "lines_deleted": "5"}) is False
-    assert _needs_enrichment({"merged_at": "x", "created_at": "", "lines_added": "10", "lines_deleted": "5"}) is True
+    assert (
+        _needs_enrichment(
+            {"merged_at": "", "created_at": "", "lines_added": "", "lines_deleted": ""}
+        )
+        is True
+    )
+    assert (
+        _needs_enrichment(
+            {"merged_at": "x", "created_at": "x", "lines_added": "10", "lines_deleted": "5"}
+        )
+        is False
+    )
+    assert (
+        _needs_enrichment(
+            {"merged_at": "x", "created_at": "", "lines_added": "10", "lines_deleted": "5"}
+        )
+        is True
+    )
 
 
 @patch("cli.migrate.fetch_pr_metadata")

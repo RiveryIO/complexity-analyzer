@@ -12,8 +12,16 @@ from cli.csv_handler import (
 def test_csv_fieldnames():
     """Test canonical schema includes all required columns."""
     required = [
-        "pr_url", "complexity", "developer", "date", "team",
-        "merged_at", "created_at", "lines_added", "lines_deleted", "explanation"
+        "pr_url",
+        "complexity",
+        "developer",
+        "date",
+        "team",
+        "merged_at",
+        "created_at",
+        "lines_added",
+        "lines_deleted",
+        "explanation",
     ]
     for col in required:
         assert col in CSV_FIELDNAMES

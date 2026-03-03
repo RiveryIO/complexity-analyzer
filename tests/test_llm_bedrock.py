@@ -115,9 +115,7 @@ class TestBedrockProviderAnalyzeComplexity:
             Exception("Temporary error"),
             {
                 "output": {
-                    "message": {
-                        "content": [{"text": '{"complexity": 3, "explanation": "Low"}'}]
-                    }
+                    "message": {"content": [{"text": '{"complexity": 3, "explanation": "Low"}'}]}
                 },
                 "usage": {"inputTokens": 200, "outputTokens": 300, "totalTokens": 500},
             },

@@ -50,9 +50,7 @@ def run_verify_settings(
     if openai_key:
         results.append(_check("OPENAI_API_KEY", True))
     else:
-        results.append(
-            _check("OPENAI_API_KEY", False, "Set OPENAI_API_KEY for --provider openai")
-        )
+        results.append(_check("OPENAI_API_KEY", False, "Set OPENAI_API_KEY for --provider openai"))
 
     # Check Anthropic API key
     anthropic_key = get_anthropic_api_key()
@@ -91,7 +89,11 @@ def run_verify_settings(
     else:
         ok = not csv_required
         results.append(
-            _check("CSV path", ok, f"Not found: {csv_file}" if csv_required else f"Optional: {csv_file}")
+            _check(
+                "CSV path",
+                ok,
+                f"Not found: {csv_file}" if csv_required else f"Optional: {csv_file}",
+            )
         )
 
     # Check team config
@@ -100,7 +102,9 @@ def run_verify_settings(
         results.append(_check("Team config (teams.yaml)", True, f"{len(mapping)} mappings"))
     else:
         results.append(
-            _check("Team config (teams.yaml)", True, "Optional: copy teams.yaml.example to teams.yaml")
+            _check(
+                "Team config (teams.yaml)", True, "Optional: copy teams.yaml.example to teams.yaml"
+            )
         )
 
     # Check required columns in CSV (if exists)

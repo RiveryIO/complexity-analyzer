@@ -1,6 +1,5 @@
 """Tests for verify-settings module."""
 
-
 from cli.verify import run_verify_settings
 
 
@@ -44,7 +43,9 @@ def test_verify_settings_csv_missing_columns(tmp_path, monkeypatch):
     """Test verify when CSV has legacy columns only."""
     monkeypatch.chdir(tmp_path)
     csv_file = tmp_path / "legacy.csv"
-    csv_file.write_text("pr_url,complexity,explanation,author\nhttps://github.com/org/repo/pull/1,5,Test,alice\n")
+    csv_file.write_text(
+        "pr_url,complexity,explanation,author\nhttps://github.com/org/repo/pull/1,5,Test,alice\n"
+    )
     results = run_verify_settings(csv_path=csv_file)
     cols_check = next((r for r in results if r[0] == "CSV columns"), None)
     assert cols_check is not None

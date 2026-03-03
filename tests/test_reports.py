@@ -7,7 +7,6 @@ from pathlib import Path
 from reports.runner import load_dataframe, run_reports
 from reports.validation import MIN_PNG_SIZE_BYTES
 
-
 # Path to sample CSV fixture
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 SAMPLE_CSV = FIXTURES_DIR / "sample_report.csv"
@@ -30,8 +29,7 @@ def test_load_dataframe_legacy_author(tmp_path):
     """Test load_dataframe handles author column as developer."""
     csv_file = tmp_path / "legacy.csv"
     csv_file.write_text(
-        "pr_url,complexity,author,explanation\n"
-        "https://github.com/org/repo/pull/1,5,alice,Test\n"
+        "pr_url,complexity,author,explanation\n" "https://github.com/org/repo/pull/1,5,alice,Test\n"
     )
     df = load_dataframe(csv_file)
     assert len(df) == 1
@@ -49,9 +47,9 @@ def test_run_reports_generates_files(tmp_path):
         p = Path(path)
         assert p.exists()
         assert p.suffix == ".png"
-        assert p.stat().st_size >= MIN_PNG_SIZE_BYTES, (
-            f"Report {path} is too small ({p.stat().st_size} bytes), likely empty"
-        )
+        assert (
+            p.stat().st_size >= MIN_PNG_SIZE_BYTES
+        ), f"Report {path} is too small ({p.stat().st_size} bytes), likely empty"
 
 
 @pytest.mark.skipif(not SAMPLE_CSV.exists(), reason="Sample CSV fixture not found")
@@ -98,7 +96,9 @@ def test_run_reports_with_generated_large_csv(tmp_path):
 def test_run_reports_empty_csv(tmp_path):
     """Test run_reports with empty CSV returns empty list."""
     csv_file = tmp_path / "empty.csv"
-    csv_file.write_text("pr_url,complexity,developer,date,team,merged_at,created_at,lines_added,lines_deleted,explanation\n")
+    csv_file.write_text(
+        "pr_url,complexity,developer,date,team,merged_at,created_at,lines_added,lines_deleted,explanation\n"
+    )
 
     output_dir = tmp_path / "reports"
     generated = run_reports(csv_path=csv_file, output_dir=output_dir)
@@ -122,6 +122,6 @@ def test_run_reports_no_empty_pngs_left_behind(tmp_path):
     # Any generated PNG must have meaningful content
     for path in generated:
         p = Path(path)
-        assert p.stat().st_size >= MIN_PNG_SIZE_BYTES, (
-            f"Report {path} is too small ({p.stat().st_size} bytes)"
-        )
+        assert (
+            p.stat().st_size >= MIN_PNG_SIZE_BYTES
+        ), f"Report {path} is too small ({p.stat().st_size} bytes)"

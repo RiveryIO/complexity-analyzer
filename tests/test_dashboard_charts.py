@@ -14,7 +14,9 @@ VERIFY_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "verify_das
 def test_dashboard_charts_render():
     """Verify Team tab charts render with correct dimensions (Playwright)."""
     if not INDEX_HTML.exists():
-        pytest.skip("Run generate-reports first: complexity-cli generate-reports -i complexity-report.csv -o reports")
+        pytest.skip(
+            "Run generate-reports first: complexity-cli generate-reports -i complexity-report.csv -o reports"
+        )
 
     pytest.importorskip("playwright")
 

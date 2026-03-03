@@ -53,11 +53,7 @@ def test_load_repos_from_file(tmp_path):
     """Test loading repos from file."""
     repos_file = tmp_path / "repos.txt"
     repos_file.write_text(
-        "# Comment line\n"
-        "owner/repo-a\n"
-        "owner/repo-b\n"
-        "\n"
-        "  owner/repo-c  \n"
+        "# Comment line\n" "owner/repo-a\n" "owner/repo-b\n" "\n" "  owner/repo-c  \n"
     )
 
     repos = load_repos_from_file(repos_file)
@@ -192,7 +188,9 @@ def test_get_max_merged_at_from_csv_none(tmp_path):
 def test_get_max_merged_at_from_csv_no_column(tmp_path):
     """Test get_max_merged_at_from_csv when merged_at column missing."""
     csv_file = tmp_path / "legacy.csv"
-    csv_file.write_text("pr_url,complexity,explanation,author\nhttps://github.com/org/repo/pull/1,5,Test,alice\n")
+    csv_file.write_text(
+        "pr_url,complexity,explanation,author\nhttps://github.com/org/repo/pull/1,5,Test,alice\n"
+    )
     assert get_max_merged_at_from_csv(csv_file) is None
 
 
@@ -215,7 +213,9 @@ def test_write_csv_row_new_file(tmp_path):
     """Test writing CSV row to new file (uses canonical schema)."""
     csv_file = tmp_path / "results.csv"
 
-    write_csv_row(csv_file, "https://github.com/owner/repo/pull/123", 5, "Test explanation", "alice")
+    write_csv_row(
+        csv_file, "https://github.com/owner/repo/pull/123", 5, "Test explanation", "alice"
+    )
 
     assert csv_file.exists()
     with csv_file.open("r") as f:
@@ -225,7 +225,11 @@ def test_write_csv_row_new_file(tmp_path):
         assert rows[0]["pr_url"] == "https://github.com/owner/repo/pull/123"
         assert rows[0]["complexity"] == "5"
         assert rows[0]["explanation"] == "Test explanation"
-        assert "developer" in rows[0] or "author" in reader.fieldnames or "developer" in reader.fieldnames
+        assert (
+            "developer" in rows[0]
+            or "author" in reader.fieldnames
+            or "developer" in reader.fieldnames
+        )
 
 
 def test_write_csv_row_existing_file(tmp_path):
@@ -236,7 +240,9 @@ def test_write_csv_row_existing_file(tmp_path):
         "https://github.com/owner/repo/pull/123,5,alice,2024-01-15,Platform,,,100,50,Test explanation\n"
     )
 
-    write_csv_row(csv_file, "https://github.com/owner/repo/pull/124", 3, "Another explanation", "bob")
+    write_csv_row(
+        csv_file, "https://github.com/owner/repo/pull/124", 3, "Another explanation", "bob"
+    )
 
     with csv_file.open("r") as f:
         reader = csv.DictReader(f)

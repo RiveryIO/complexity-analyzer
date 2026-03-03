@@ -153,6 +153,7 @@ class TestGetAnthropicApiKey:
         """Test getting key from ANTHROPIC_API_KEY."""
         assert get_anthropic_api_key() == "sk-ant-test"
 
+
 # AnalysisConfig validation tests
 
 
