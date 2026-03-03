@@ -1,0 +1,18 @@
+---
+description: Rules for using the GitHub CLI (gh) in this repository
+globs:
+alwaysApply: true
+---
+
+# GitHub CLI Rules
+
+This repository is a fork. The `gh` CLI defaults to the **upstream** parent repo for PR creation and other operations.
+
+**Always specify `--repo RiveryIO/complexity-analyzer`** when running `gh` commands that target a repo (e.g. `gh pr create`, `gh pr view`, `gh pr list`, `gh pr checks`).
+
+Example:
+```bash
+gh pr create --repo RiveryIO/complexity-analyzer --title "..." --body "..."
+```
+
+Never create PRs against `lemonade-hq/complexity-analyzer` — that is the public upstream and will expose private data.
