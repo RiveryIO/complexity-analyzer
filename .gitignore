@@ -50,6 +50,7 @@ Thumbs.db
 
 # Results/data files
 *.csv
+!complexity-report.csv
 *.png
 results/
 
