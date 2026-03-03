@@ -62,3 +62,19 @@ lsof -ti:8080 | xargs kill 2>/dev/null
 ```bash
 complexity-cli generate-reports && python -m http.server 8080 -d reports & sleep 1 && open http://localhost:8080
 ```
+
+## Public Dashboard (Auto-Deploy)
+
+The dashboard is also deployed automatically to GitHub Pages on every push of `complexity-report.csv` to `main`.
+
+**URL:** `https://riveryio.github.io/complexity-analyzer/` (password-protected via StatiCrypt)
+
+To update the public dashboard:
+
+```bash
+git add complexity-report.csv
+git commit -m "data: update complexity report"
+git push
+```
+
+GitHub Actions generates reports and deploys a password-protected version. The workflow lives in `.github/workflows/deploy-reports.yml`.
