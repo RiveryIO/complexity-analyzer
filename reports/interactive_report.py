@@ -408,7 +408,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       }});
       const teamOrder = Object.keys(teams).sort();
       const selected = new Set();
-      if (allSeries.length > 0) selected.add(allSeries[0].name);
+      allSeries.forEach(s => selected.add(s.name));
 
       const searchInput = document.createElement('input');
       searchInput.className = 'picker-search';
