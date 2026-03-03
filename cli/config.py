@@ -1,5 +1,7 @@
 """Configuration parsing and validation."""
 
+from __future__ import annotations
+
 import os
 import re
 from typing import List, Optional
