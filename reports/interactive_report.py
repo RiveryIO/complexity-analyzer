@@ -250,6 +250,90 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       transition: color 0.15s;
     }}
     .picker-item.selected .picker-name {{ color: var(--text); font-weight: 500; }}
+
+    /* Todo / Roadmap tab */
+    .todo-panel {{
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0.5rem 0 2rem;
+    }}
+    .todo-header {{
+      margin-bottom: 2rem;
+    }}
+    .todo-header h2 {{
+      font-family: 'Syne', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.35rem;
+    }}
+    .todo-header p {{
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin: 0;
+    }}
+    .todo-list {{
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+    }}
+    .todo-item {{
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      transition: box-shadow 0.2s, border-color 0.2s;
+      cursor: default;
+    }}
+    .todo-item:hover {{
+      box-shadow: 0 3px 16px rgba(0,0,0,0.07);
+      border-color: rgba(180,83,9,0.2);
+    }}
+    .todo-number {{
+      font-family: 'Syne', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border-radius: 6px;
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }}
+    .todo-body {{ flex: 1; min-width: 0; }}
+    .todo-title {{
+      font-family: 'Syne', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0 0 0.3rem;
+      line-height: 1.3;
+    }}
+    .todo-desc {{
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin: 0 0 0.6rem;
+      line-height: 1.5;
+    }}
+    .todo-badge {{
+      display: inline-block;
+      font-size: 0.67rem;
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }}
   </style>
 </head>
 <body>
@@ -274,8 +358,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
   <script>
     const chartData = {chart_data_json};
-    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced'];
-    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced' }};
+    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced', 'todo'];
+    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced', todo: 'Roadmap' }};
 
     const CHART_THEME = {{
       backgroundColor: 'transparent',
@@ -650,10 +734,51 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       tabsEl.appendChild(btn);
     }});
 
+    const TODO_ITEMS = [
+      {{
+        title: 'Bitbucket Scan \u2014 Relevant Repos & Projects',
+        desc: 'Automatically discover and index all relevant Bitbucket repositories and projects, linking PR complexity data to the correct teams and service boundaries.'
+      }},
+      {{
+        title: 'Deployment Success Rate',
+        desc: 'Track the percentage of deployments that succeed without rollbacks or hotfixes. Surface trends per service and team to identify reliability gaps.'
+      }},
+      {{
+        title: 'Support Tickets \u2014 Defect Escape Rate',
+        desc: 'Correlate inbound support tickets and production defects with the PRs that introduced them, measuring how often changes escape QA and reach users.'
+      }},
+      {{
+        title: 'User-Facing Features Released',
+        desc: 'Count and categorise merged PRs that deliver net-new user-visible functionality, giving leadership a direct signal on product output velocity.'
+      }}
+    ];
+
     tabOrder.forEach((key, i) => {{
       const panel = document.createElement('div');
       panel.id = 'panel-' + key;
       panel.className = 'panel' + (i === 0 ? ' active' : '');
+
+      if (key === 'todo') {{
+        const items = TODO_ITEMS.map((item, n) =>
+          `<div class="todo-item">
+            <div class="todo-number">${{n + 1}}</div>
+            <div class="todo-body">
+              <div class="todo-title">${{item.title}}</div>
+              <div class="todo-desc">${{item.desc}}</div>
+              <span class="todo-badge">Planned</span>
+            </div>
+          </div>`
+        ).join('');
+        panel.innerHTML = `<div class="todo-panel">
+          <div class="todo-header">
+            <h2>Upcoming Metrics Roadmap</h2>
+            <p>Planned data sources and analytics to be added to this dashboard.</p>
+          </div>
+          <div class="todo-list">${{items}}</div>
+        </div>`;
+        panelsEl.appendChild(panel);
+        return;
+      }}
 
       const charts = chartData[key] || [];
       let html = '<div class="grid">';
