@@ -485,26 +485,9 @@ def _extract_features() -> Dict[str, Any]:
             "drilldown": True,
         })
 
-    # 2: Features per month by team (stacked bar)
     teams = sorted(df_feat["team"].unique())
-    if teams:
-        all_months = sorted(df_feat["month"].unique())
-        series = []
-        for team in teams:
-            tdf = df_feat[df_feat["team"] == team]
-            counts = tdf.groupby("month").size().reindex(all_months, fill_value=0)
-            series.append({"name": team, "data": counts.tolist()})
-        charts.append({
-            "id": "feat-monthly-team",
-            "type": "stackedBar",
-            "title": "Features Released per Month — By Team",
-            "subtitle": "Click a bar segment to see that team's features",
-            "x": [str(m) for m in all_months],
-            "series": series,
-            "drilldown": True,
-        })
 
-    # 4: Category breakdown per month (stacked bar — all categories)
+    # 2: Category breakdown per month (stacked bar — all categories)
     categories = ["feature", "improvement", "tech_debt", "bug_fix"]
     all_months_full = sorted(df["month"].unique())
     cat_series = []
