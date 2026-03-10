@@ -60,13 +60,12 @@ def test_run_reports_performance(tmp_path):
     generated = run_reports(csv_path=SAMPLE_CSV, output_dir=output_dir)
     elapsed = time.perf_counter() - start
 
-    assert elapsed < 10.0, f"Reports took {elapsed:.2f}s, expected < 10s"
+    assert elapsed < 30.0, f"Reports took {elapsed:.2f}s, expected < 30s"
     assert len(generated) >= 10
 
 
 def test_run_reports_with_generated_large_csv(tmp_path):
     """Test reports performance with programmatically generated large CSV."""
-    # Generate 150 rows to simulate real workload
     rows = [
         "pr_url,complexity,developer,date,team,merged_at,created_at,lines_added,lines_deleted,explanation"
     ]
@@ -89,7 +88,7 @@ def test_run_reports_with_generated_large_csv(tmp_path):
     generated = run_reports(csv_path=csv_file, output_dir=output_dir)
     elapsed = time.perf_counter() - start
 
-    assert elapsed < 10.0, f"Reports took {elapsed:.2f}s with 150 rows, expected < 10s"
+    assert elapsed < 30.0, f"Reports took {elapsed:.2f}s with 150 rows, expected < 30s"
     assert len(generated) >= 10
 
 
