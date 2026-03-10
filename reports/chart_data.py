@@ -485,23 +485,7 @@ def _extract_features() -> Dict[str, Any]:
             "drilldown": True,
         })
 
-    # 2: User-facing features per month — All teams
-    uf = df_feat[df_feat["is_user_facing"] == "true"]
-    uf_monthly = uf.groupby("month").size()
-    if not uf_monthly.empty:
-        labels = [str(p) for p in uf_monthly.index]
-        charts.append({
-            "id": "feat-uf-monthly-all",
-            "type": "bar",
-            "title": "User-Facing Features per Month — All Teams",
-            "subtitle": "Click a bar to drill into the feature list",
-            "x": labels,
-            "y": uf_monthly.tolist(),
-            "drilldown": True,
-            "filter": {"is_user_facing": "true"},
-        })
-
-    # 3: Features per month by team (stacked bar)
+    # 2: Features per month by team (stacked bar)
     teams = sorted(df_feat["team"].unique())
     if teams:
         all_months = sorted(df_feat["month"].unique())
