@@ -51,6 +51,7 @@ Thumbs.db
 # Results/data files
 *.csv
 !complexity-report.csv
+!features-released.csv
 *.png
 results/
 
