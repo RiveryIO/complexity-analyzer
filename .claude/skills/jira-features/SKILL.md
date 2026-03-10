@@ -43,17 +43,18 @@ Proposed board mapping:
 
 For each team/board in `jira-teams.yaml`:
 
-1. Build the JQL query:
+1. Build the JQL query, **excluding QA assignees** listed in `settings.excluded_assignees`:
 
 ```
-project = <board_project> AND status in ("Done", "Closed", "Released") AND resolved >= "-{days}d"
+project = <board_project> AND status in ("Done", "Closed", "Released") AND resolved >= "-{days}d" AND assignee NOT IN ("Nastia Feigin")
 ```
 
 Default `{days}` is from `settings.default_lookback_days` (90). Override with user-supplied value.
+Build the `NOT IN` clause dynamically from `settings.excluded_assignees` in `jira-teams.yaml`.
 
 2. Call `jira_search` via MCP with:
    - `jql`: the query above
-   - `fields`: `summary,description,issuetype,status,resolutiondate,created,parent,labels,components,fixVersions,{story_points_field}`
+   - `fields`: `summary,description,issuetype,status,resolutiondate,created,parent,labels,components,fixVersions,{story_points_field},assignee`
    - `limit`: 50
    - `start_at`: 0 (paginate until all results fetched)
 
@@ -82,6 +83,8 @@ Group the fetched tickets into "features":
    - `jira_keys` = just this one key
 
 3. **Bug/Defect handling**: If `issuetype` is `Bug` or `Defect`, set `category = bug_fix` regardless of Epic grouping. Bugs under an Epic are still grouped with that Epic but the category reflects the bug nature. If an Epic contains ONLY bugs/defects, the whole feature is `category = bug_fix`. Mixed Epics (bugs + stories) keep `category = feature`.
+
+4. **QA ticket exclusion**: Tickets assigned to QA personnel (listed in `settings.excluded_assignees`) are already filtered out at the JQL level (Step 2). If any slip through, drop them before grouping. A feature split into N sub-tickets should count as **1 feature**, not N. QA validation tickets are part of the feature delivery process, not standalone features.
 
 ---
 

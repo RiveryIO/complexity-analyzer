@@ -30,3 +30,5 @@ settings:
     - Released
   story_points_field: customfield_11703
   story_points_field_name: "Story point estimate"
+  excluded_assignees:
+    - "Nastia Feigin"
