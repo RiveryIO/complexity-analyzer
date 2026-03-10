@@ -3,11 +3,12 @@ name: PR Complexity Analysis
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch: {}
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    if: ${{ secrets.OPENAI_API_KEY != '' }}
+    if: github.event_name == 'pull_request' && secrets.OPENAI_API_KEY != ''
     permissions:
       pull-requests: write
       contents: read
