@@ -75,9 +75,7 @@ class TestParsePrUrl:
 
     def test_bitbucket_url_with_trailing_whitespace(self):
         """Test parsing Bitbucket URL with trailing whitespace."""
-        workspace, repo, pr = parse_pr_url(
-            "  https://bitbucket.org/ws/repo/pull-requests/99  "
-        )
+        workspace, repo, pr = parse_pr_url("  https://bitbucket.org/ws/repo/pull-requests/99  ")
         assert workspace == "ws"
         assert repo == "repo"
         assert pr == 99
@@ -90,10 +88,7 @@ class TestDetectPrProvider:
         assert detect_pr_provider("https://github.com/owner/repo/pull/1") == "github"
 
     def test_bitbucket(self):
-        assert (
-            detect_pr_provider("https://bitbucket.org/ws/repo/pull-requests/1")
-            == "bitbucket"
-        )
+        assert detect_pr_provider("https://bitbucket.org/ws/repo/pull-requests/1") == "bitbucket"
 
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unrecognized PR URL"):

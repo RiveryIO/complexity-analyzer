@@ -13,6 +13,7 @@ from .constants import (
     DEFAULT_SLEEP_SECONDS,
     DEFAULT_TIMEOUT,
 )
+
 COMPLEXITY_MARKER = "<!-- [complexity-analyzer] -->"
 
 
@@ -256,9 +257,7 @@ def search_bb_merged_prs(
                                 pass
 
                 if progress_callback:
-                    progress_callback(
-                        f"Found {len(pr_urls)} merged PRs in {workspace}/{repo}..."
-                    )
+                    progress_callback(f"Found {len(pr_urls)} merged PRs in {workspace}/{repo}...")
 
                 if not data.get("next"):
                     break
@@ -305,9 +304,7 @@ def add_bb_pr_comment(
 
     try:
         with httpx.Client(timeout=timeout) as client:
-            response = client.post(
-                url, auth=auth, json={"content": {"raw": body}}
-            )
+            response = client.post(url, auth=auth, json={"content": {"raw": body}})
             response.raise_for_status()
             data = response.json()
             return data.get("id", 0)

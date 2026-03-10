@@ -410,9 +410,7 @@ def generate_pr_list_from_bb_project(
 
     bb_email, bb_token = get_bitbucket_credentials()
     if not bb_email or not bb_token:
-        raise ValueError(
-            "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for --bb-project"
-        )
+        raise ValueError("BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for --bb-project")
 
     parts = bb_project_spec.split("/", 1)
     if len(parts) != 2 or not parts[1]:
@@ -432,11 +430,12 @@ def generate_pr_list_from_bb_project(
 
     effective_since = since_override or since
 
-    typer.echo(
-        f"Discovering repos in Bitbucket project {workspace}/{project_uuid}...", err=True
-    )
+    typer.echo(f"Discovering repos in Bitbucket project {workspace}/{project_uuid}...", err=True)
     repos = list_bb_project_repos(
-        workspace, project_uuid, bb_email, bb_token,
+        workspace,
+        project_uuid,
+        bb_email,
+        bb_token,
         progress_callback=lambda m: typer.echo(f"  {m}", err=True),
     )
     typer.echo(f"Found {len(repos)} repositories in project", err=True)
@@ -632,9 +631,7 @@ def get_max_merged_at_from_csv(csv_path: Optional[Path]) -> Optional[datetime]:
         return None
 
 
-def get_max_merged_for_source(
-    csv_path: Optional[Path], source: str
-) -> Optional[datetime]:
+def get_max_merged_for_source(csv_path: Optional[Path], source: str) -> Optional[datetime]:
     """Like get_max_merged_at_from_csv but filtered to a specific source.
 
     Falls back to URL-based detection when source column is absent.
@@ -653,11 +650,7 @@ def get_max_merged_for_source(
                 if has_source_col:
                     row_source = (row.get("source") or "").strip()
                 else:
-                    row_source = (
-                        "bitbucket"
-                        if bb_marker in (row.get("pr_url") or "")
-                        else "github"
-                    )
+                    row_source = "bitbucket" if bb_marker in (row.get("pr_url") or "") else "github"
                 if row_source != source:
                     continue
                 val = (row.get("merged_at") or "").strip()
@@ -1190,8 +1183,14 @@ def run_batch_analysis_with_labels(
                         bb_email, bb_token = get_bitbucket_credentials()
                         if bb_email and bb_token:
                             add_bb_pr_comment(
-                                owner, repo, pr, complexity, explanation,
-                                bb_email, bb_token, timeout,
+                                owner,
+                                repo,
+                                pr,
+                                complexity,
+                                explanation,
+                                bb_email,
+                                bb_token,
+                                timeout,
                             )
                             label_applied = f"complexity:{complexity}"
                     elif github_token:

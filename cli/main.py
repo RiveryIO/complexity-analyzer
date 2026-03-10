@@ -134,8 +134,13 @@ def analyze_pr_to_dict(
                 "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for Bitbucket PRs"
             )
         diff_text, meta = fetch_bb_pr(
-            owner, repo, pr, bb_email, bb_token,
-            sleep_s=sleep_seconds, timeout=timeout,
+            owner,
+            repo,
+            pr,
+            bb_email,
+            bb_token,
+            sleep_s=sleep_seconds,
+            timeout=timeout,
         )
     elif token_rotator:
         diff_text, meta = fetch_pr_with_rotation(
@@ -299,16 +304,21 @@ def _analyze_pr_impl(
 
                     bb_email, bb_token = get_bitbucket_credentials()
                     if not bb_email or not bb_token:
-                        raise ValueError(
-                            "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN required"
-                        )
+                        raise ValueError("BITBUCKET_EMAIL and BITBUCKET_API_TOKEN required")
                     diff_text, meta = fetch_bb_pr(
-                        owner, repo, pr, bb_email, bb_token,
+                        owner,
+                        repo,
+                        pr,
+                        bb_email,
+                        bb_token,
                         sleep_s=sleep_seconds,
                     )
                 else:
                     diff_text, meta = fetch_pr(
-                        owner, repo, pr, final_github_token,
+                        owner,
+                        repo,
+                        pr,
+                        final_github_token,
                         sleep_s=sleep_seconds,
                     )
                 title = (meta.get("title") or "").strip()
@@ -841,9 +851,7 @@ def batch_analyze(
 
                 bb_since_override = None
                 if output_file and not overwrite:
-                    bb_max = get_max_merged_for_source(
-                        output_file, "bitbucket"
-                    )
+                    bb_max = get_max_merged_for_source(output_file, "bitbucket")
                     if bb_max:
                         bb_next = bb_max + timedelta(days=1)
                         bb_since_override = max(since_dt, bb_next)

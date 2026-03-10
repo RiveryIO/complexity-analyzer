@@ -132,10 +132,7 @@ def get_bitbucket_credentials() -> tuple[Optional[str], Optional[str]]:
         Tuple of (email, api_token). Either may be None if not set.
     """
     email = os.getenv("BITBUCKET_EMAIL")
-    token = (
-        os.getenv("BITBUCKET_API_TOKEN")
-        or os.getenv("BITBUCKET_APP_PASSWORD")
-    )
+    token = os.getenv("BITBUCKET_API_TOKEN") or os.getenv("BITBUCKET_APP_PASSWORD")
     return email, token
 
 

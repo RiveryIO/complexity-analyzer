@@ -92,8 +92,13 @@ def analyze_single_pr(
                 "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for Bitbucket PRs"
             )
         diff_text, meta = fetch_bb_pr(
-            owner, repo, pr, bb_email, bb_token,
-            sleep_s=config.sleep_seconds, timeout=config.timeout,
+            owner,
+            repo,
+            pr,
+            bb_email,
+            bb_token,
+            sleep_s=config.sleep_seconds,
+            timeout=config.timeout,
         )
     elif config.token_rotator:
         diff_text, meta = fetch_pr_with_rotation(
@@ -196,8 +201,13 @@ def handle_dry_run(
                 "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for Bitbucket PRs"
             )
         diff_text, meta = fetch_bb_pr(
-            owner, repo, pr, bb_email, bb_token,
-            sleep_s=config.sleep_seconds, timeout=config.timeout,
+            owner,
+            repo,
+            pr,
+            bb_email,
+            bb_token,
+            sleep_s=config.sleep_seconds,
+            timeout=config.timeout,
         )
     elif config.token_rotator:
         diff_text, meta = fetch_pr_with_rotation(

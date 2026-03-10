@@ -6,12 +6,8 @@ from typing import Dict, List, Optional, Tuple
 from .constants import GITHUB_API_VERSION, TOKEN_VISIBLE_CHARS
 
 # Regex to parse PR URLs
-_GITHUB_PR_RE = re.compile(
-    r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)"
-)
-_BITBUCKET_PR_RE = re.compile(
-    r"https?://bitbucket\.org/([^/\s]+)/([^/\s]+)/pull-requests/(\d+)"
-)
+_GITHUB_PR_RE = re.compile(r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
+_BITBUCKET_PR_RE = re.compile(r"https?://bitbucket\.org/([^/\s]+)/([^/\s]+)/pull-requests/(\d+)")
 
 # Keep legacy name for backward compat in tests
 _OWNER_REPO_RE = _GITHUB_PR_RE
