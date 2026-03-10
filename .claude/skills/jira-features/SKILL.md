@@ -159,6 +159,8 @@ python scripts/jira_features_to_csv.py --input features.json --dry-run
 | `story_points` | float | Sum of story points |
 | `description` | string | LLM-generated one-liner |
 | `fix_versions` | string | Jira fix versions (pipe-separated) |
+| `ticket_links` | string | Pipe-separated Jira browse URLs for each key in `jira_keys` |
+| `parent_epic_link` | string | Jira browse URL for the parent epic (empty for orphan tickets or synthetic IDs) |
 
 ## Velocity Queries This Enables
 

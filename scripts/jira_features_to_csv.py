@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import sys
 from datetime import date, datetime
 from math import isnan
@@ -20,6 +21,9 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CSV = REPO_ROOT / "features-released.csv"
+
+JIRA_BASE = "https://boomii.atlassian.net/browse/"
+_JIRA_KEY_RE = re.compile(r"^[A-Z]+-\d+$")
 
 FIELDNAMES = [
     "feature_id",
@@ -38,6 +42,8 @@ FIELDNAMES = [
     "story_points",
     "description",
     "fix_versions",
+    "ticket_links",
+    "parent_epic_link",
 ]
 
 
@@ -74,6 +80,29 @@ def _safe_float(v: Any) -> str:
         return ""
 
 
+def _jira_link(key: str) -> str:
+    """Return a Jira browse URL if *key* looks like a valid issue key."""
+    return f"{JIRA_BASE}{key}" if _JIRA_KEY_RE.match(key) else ""
+
+
+def _ticket_links(jira_keys_str: str) -> str:
+    """Pipe-separated Jira URLs for every valid key in *jira_keys_str*."""
+    keys = [k.strip() for k in jira_keys_str.split("|") if k.strip()]
+    links = [_jira_link(k) for k in keys if _jira_link(k)]
+    return "|".join(links)
+
+
+def _parent_epic_link(feature_id: str, jira_keys_str: str) -> str:
+    """Return the epic link only when feature_id is a real Jira key
+    that differs from a sole child ticket (i.e. it's an actual epic grouping)."""
+    if not _JIRA_KEY_RE.match(feature_id):
+        return ""
+    keys = [k.strip() for k in jira_keys_str.split("|") if k.strip()]
+    if len(keys) == 1 and keys[0] == feature_id:
+        return ""
+    return _jira_link(feature_id)
+
+
 def normalize_row(raw: dict[str, Any]) -> dict[str, str]:
     """Convert a raw JSON object into a flat CSV row with derived columns."""
     jira_keys = raw.get("jira_keys", [])
@@ -100,8 +129,10 @@ def normalize_row(raw: dict[str, Any]) -> dict[str, str]:
     else:
         is_uf_str = str(is_uf).lower() if is_uf is not None else ""
 
+    feature_id = str(raw.get("feature_id", ""))
+
     return {
-        "feature_id": str(raw.get("feature_id", "")),
+        "feature_id": feature_id,
         "feature_name": str(raw.get("feature_name", "")),
         "jira_keys": jira_keys_str,
         "ticket_count": str(ticket_count),
@@ -117,6 +148,8 @@ def normalize_row(raw: dict[str, Any]) -> dict[str, str]:
         "story_points": _safe_float(raw.get("story_points")),
         "description": str(raw.get("description", "")),
         "fix_versions": str(fix_versions),
+        "ticket_links": _ticket_links(jira_keys_str),
+        "parent_epic_link": _parent_epic_link(feature_id, jira_keys_str),
     }
 
 
@@ -162,6 +195,27 @@ def write_csv(
             writer.writerow(row)
 
 
+def migrate_csv(csv_path: Path) -> None:
+    """Re-read existing CSV and rewrite it with ticket_links / parent_epic_link
+    columns computed from the existing jira_keys and feature_id data."""
+    existing = load_existing(csv_path)
+    if not existing:
+        print("Nothing to migrate.", file=sys.stderr)
+        return
+
+    migrated: list[dict[str, str]] = []
+    for row in existing.values():
+        jira_keys_str = row.get("jira_keys", "")
+        feature_id = row.get("feature_id", "")
+        row["ticket_links"] = _ticket_links(jira_keys_str)
+        row["parent_epic_link"] = _parent_epic_link(feature_id, jira_keys_str)
+        migrated.append(row)
+
+    migrated.sort(key=lambda r: r.get("released_date", ""), reverse=True)
+    write_csv(migrated, csv_path)
+    print(f"Migrated {len(migrated)} rows in {csv_path}")
+
+
 def main() -> None:
     """CLI entry point."""
     ap = argparse.ArgumentParser(
@@ -179,7 +233,17 @@ def main() -> None:
         "--dry-run", action="store_true",
         help="Preview without writing",
     )
+    ap.add_argument(
+        "--migrate", action="store_true",
+        help="Rewrite existing CSV with ticket_links/parent_epic_link columns",
+    )
     args = ap.parse_args()
+
+    csv_path = Path(args.output)
+
+    if args.migrate:
+        migrate_csv(csv_path)
+        return
 
     if args.input == "-":
         raw_json = sys.stdin.read()
@@ -197,7 +261,6 @@ def main() -> None:
 
     new_rows = [normalize_row(item) for item in data]
 
-    csv_path = Path(args.output)
     existing = load_existing(csv_path)
     seen = set(existing.keys())
 
