@@ -1067,15 +1067,18 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
       let summaryHtml = '';
       if (key === 'features' && featuresRows.length) {{
-        const total = featuresRows.length;
-        const uf = featuresRows.filter(r => r.is_user_facing === 'true').length;
-        const feats = featuresRows.filter(r => r.category === 'feature').length;
+        const noBugs = featuresRows.filter(r => r.category !== 'bug_fix');
+        const total = noBugs.length;
+        const uf = noBugs.filter(r => r.is_user_facing === 'true').length;
+        const feats = noBugs.filter(r => r.category === 'feature').length;
+        const impr = noBugs.filter(r => r.category === 'improvement').length;
         const bugs = featuresRows.filter(r => r.category === 'bug_fix').length;
-        const teams = [...new Set(featuresRows.map(r => r.team))].length;
+        const teams = [...new Set(noBugs.map(r => r.team))].length;
         summaryHtml = `<div class="feat-summary">
-          <div class="feat-stat"><div class="stat-value">${{total}}</div><div class="stat-label">Total features</div></div>
+          <div class="feat-stat"><div class="stat-value">${{total}}</div><div class="stat-label">Total shipped</div></div>
           <div class="feat-stat"><div class="stat-value">${{uf}}</div><div class="stat-label">User-facing</div></div>
           <div class="feat-stat"><div class="stat-value">${{feats}}</div><div class="stat-label">New features</div></div>
+          <div class="feat-stat"><div class="stat-value">${{impr}}</div><div class="stat-label">Improvements</div></div>
           <div class="feat-stat"><div class="stat-value">${{bugs}}</div><div class="stat-label">Bug fixes</div></div>
           <div class="feat-stat"><div class="stat-value">${{teams}}</div><div class="stat-label">Teams</div></div>
         </div>`;
