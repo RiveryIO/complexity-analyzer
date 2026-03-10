@@ -1,0 +1,32 @@
+# Jira board-to-team mapping for feature velocity tracking.
+# Board IDs discovered via jira_get_agile_boards MCP on 2026-03-10.
+# Re-run the jira-features skill with "discover boards" to refresh.
+
+teams:
+  Core:
+    board_id: 6699
+    board_name: "CORE board"
+  FullStack:
+    board_id: 6687
+    board_name: "FULL board"
+  Integration:
+    board_id: 6702
+    board_name: "Integrations Team"
+  CDC:
+    board_id: 6675
+    board_name: "Database & CDC Integration (Ardal team)"
+  Ninja:
+    board_id: 7968
+    board_name: "Ninja Team"
+  Devops:
+    board_id: 3947
+    board_name: "Heimdall scrum (Devops)"
+
+settings:
+  default_lookback_days: 90
+  jira_done_statuses:
+    - Done
+    - Closed
+    - Released
+  story_points_field: customfield_11703
+  story_points_field_name: "Story point estimate"
