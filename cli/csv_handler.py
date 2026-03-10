@@ -20,6 +20,7 @@ CSV_FIELDNAMES = [
     "lines_added",
     "lines_deleted",
     "explanation",
+    "source",
 ]
 
 
@@ -88,6 +89,7 @@ class CSVBatchWriter:
         created_at: Optional[str] = None,
         lines_added: Optional[int] = None,
         lines_deleted: Optional[int] = None,
+        source: Optional[str] = None,
     ) -> None:
         """
         Add a row to the buffer, flush if batch size reached.
@@ -104,11 +106,14 @@ class CSVBatchWriter:
             created_at: ISO timestamp when PR was opened
             lines_added: Lines added from GitHub
             lines_deleted: Lines deleted from GitHub
+            source: "github" or "bitbucket" (auto-detected from pr_url if None)
         """
         with self._lock:
             self._ensure_initialized()
 
             dev = developer if developer is not None else author
+            if source is None:
+                source = "bitbucket" if "bitbucket.org" in pr_url else "github"
             row: Dict[str, Any] = {
                 "pr_url": pr_url,
                 "complexity": str(complexity),
@@ -120,6 +125,7 @@ class CSVBatchWriter:
                 "lines_added": str(lines_added) if lines_added is not None else "",
                 "lines_deleted": str(lines_deleted) if lines_deleted is not None else "",
                 "explanation": explanation,
+                "source": source,
             }
             # Ensure all fieldnames present
             for fn in self._fieldnames:

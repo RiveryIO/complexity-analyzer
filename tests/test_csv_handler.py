@@ -22,6 +22,7 @@ def test_csv_fieldnames():
         "lines_added",
         "lines_deleted",
         "explanation",
+        "source",
     ]
     for col in required:
         assert col in CSV_FIELDNAMES
@@ -60,6 +61,26 @@ def test_csv_batch_writer_add_row_full_schema(tmp_path):
         assert rows[0]["created_at"] == "2024-01-10T09:00:00Z"
         assert rows[0]["lines_added"] == "100"
         assert rows[0]["lines_deleted"] == "50"
+        assert rows[0]["source"] == "github"
+
+
+def test_csv_batch_writer_add_row_bitbucket_source(tmp_path):
+    """Test that source is auto-detected for Bitbucket URLs."""
+    output_file = tmp_path / "output.csv"
+    writer = CSVBatchWriter(output_file)
+    writer.add_row(
+        "https://bitbucket.org/ws/repo/pull-requests/10",
+        7,
+        "BB explanation",
+        "charlie",
+    )
+    writer.close()
+
+    with output_file.open("r") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        assert len(rows) == 1
+        assert rows[0]["source"] == "bitbucket"
 
 
 def test_csv_batch_writer_add_row_legacy_signature(tmp_path):

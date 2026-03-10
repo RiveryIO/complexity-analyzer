@@ -387,6 +387,89 @@ def generate_pr_list_from_repos_file(
                 typer.echo(f"Warning: Failed to close cache file: {e}", err=True)
 
 
+def generate_pr_list_from_bb_project(
+    bb_project_spec: str,
+    since: datetime,
+    until: datetime,
+    cache_file: Optional[Path] = None,
+    sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
+    since_override: Optional[datetime] = None,
+) -> List[str]:
+    """Discover repos in a Bitbucket project and collect merged PR URLs.
+
+    Args:
+        bb_project_spec: "workspace/{project-uuid}" string
+        since: Start date
+        until: End date
+        cache_file: Optional cache file for PR URL list
+        sleep_seconds: Sleep between API calls
+        since_override: If set, override since date (for incremental fetch)
+    """
+    from .bitbucket import list_bb_project_repos, search_bb_merged_prs
+    from .config import get_bitbucket_credentials
+
+    bb_email, bb_token = get_bitbucket_credentials()
+    if not bb_email or not bb_token:
+        raise ValueError(
+            "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for --bb-project"
+        )
+
+    parts = bb_project_spec.split("/", 1)
+    if len(parts) != 2 or not parts[1]:
+        raise ValueError(
+            f"Invalid --bb-project format: {bb_project_spec!r}. "
+            'Expected "workspace/{{project-uuid}}"'
+        )
+    workspace, project_uuid = parts[0], parts[1]
+
+    if cache_file and cache_file.exists():
+        typer.echo(f"Loading PR URLs from cache: {cache_file}", err=True)
+        with cache_file.open("r") as f:
+            cached = [line.strip() for line in f if line.strip()]
+        if cached:
+            typer.echo(f"Loaded {len(cached)} cached PR URLs", err=True)
+            return cached
+
+    effective_since = since_override or since
+
+    typer.echo(
+        f"Discovering repos in Bitbucket project {workspace}/{project_uuid}...", err=True
+    )
+    repos = list_bb_project_repos(
+        workspace, project_uuid, bb_email, bb_token,
+        progress_callback=lambda m: typer.echo(f"  {m}", err=True),
+    )
+    typer.echo(f"Found {len(repos)} repositories in project", err=True)
+
+    all_pr_urls: List[str] = []
+    for repo_full in repos:
+        repo_ws, repo_slug = repo_full.split("/", 1)
+        typer.echo(f"  Scanning {repo_full} for merged PRs...", err=True)
+        pr_urls = search_bb_merged_prs(
+            repo_ws,
+            repo_slug,
+            effective_since,
+            until,
+            bb_email,
+            bb_token,
+            sleep_s=sleep_seconds,
+            progress_callback=lambda m: typer.echo(f"    {m}", err=True),
+        )
+        all_pr_urls.extend(pr_urls)
+        time.sleep(sleep_seconds)
+
+    typer.echo(f"Total: {len(all_pr_urls)} merged PRs across {len(repos)} repos", err=True)
+
+    if cache_file:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        with cache_file.open("w") as f:
+            for url in all_pr_urls:
+                f.write(url + "\n")
+        typer.echo(f"Cached PR URLs to {cache_file}", err=True)
+
+    return all_pr_urls
+
+
 def generate_pr_list_from_all_repos(
     since: datetime,
     until: datetime,
@@ -536,6 +619,51 @@ def get_max_merged_at_from_csv(csv_path: Optional[Path]) -> Optional[datetime]:
                     continue
                 try:
                     # Handle ISO format with Z
+                    if val.endswith("Z"):
+                        val = val[:-1] + "+00:00"
+                    dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                    dt = dt.replace(tzinfo=None)
+                    if max_dt is None or dt > max_dt:
+                        max_dt = dt
+                except (ValueError, TypeError):
+                    continue
+        return max_dt
+    except Exception:
+        return None
+
+
+def get_max_merged_for_source(
+    csv_path: Optional[Path], source: str
+) -> Optional[datetime]:
+    """Like get_max_merged_at_from_csv but filtered to a specific source.
+
+    Falls back to URL-based detection when source column is absent.
+    """
+    if not csv_path or not csv_path.exists():
+        return None
+    bb_marker = "bitbucket.org"
+    try:
+        max_dt: Optional[datetime] = None
+        with csv_path.open("r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames or "merged_at" not in reader.fieldnames:
+                return None
+            has_source_col = "source" in reader.fieldnames
+            for row in reader:
+                if has_source_col:
+                    row_source = (row.get("source") or "").strip()
+                else:
+                    row_source = (
+                        "bitbucket"
+                        if bb_marker in (row.get("pr_url") or "")
+                        else "github"
+                    )
+                if row_source != source:
+                    continue
+                val = (row.get("merged_at") or "").strip()
+                if not val:
+                    continue
+                try:
                     if val.endswith("Z"):
                         val = val[:-1] + "+00:00"
                     dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
@@ -954,16 +1082,35 @@ def run_batch_analysis_with_labels(
                 typer.echo(f"  Checked {idx}/{len(pr_urls)} PRs...", err=True)
 
             try:
+                from .utils import detect_pr_provider
+
+                pr_provider = detect_pr_provider(pr_url)
                 owner, repo, pr = parse_pr_url(pr_url)
-                existing_label = has_complexity_label(
-                    owner, repo, pr, github_token, label_prefix, timeout
-                )
-                if existing_label:
-                    already_labeled += 1
+
+                if pr_provider == "bitbucket":
+                    from .bitbucket import has_bb_complexity_comment
+                    from .config import get_bitbucket_credentials
+
+                    bb_email, bb_token = get_bitbucket_credentials()
+                    if bb_email and bb_token:
+                        existing_score = has_bb_complexity_comment(
+                            owner, repo, pr, bb_email, bb_token, timeout
+                        )
+                        if existing_score is not None:
+                            already_labeled += 1
+                        else:
+                            unlabeled_urls.append(pr_url)
+                    else:
+                        unlabeled_urls.append(pr_url)
                 else:
-                    unlabeled_urls.append(pr_url)
+                    existing_label = has_complexity_label(
+                        owner, repo, pr, github_token, label_prefix, timeout
+                    )
+                    if existing_label:
+                        already_labeled += 1
+                    else:
+                        unlabeled_urls.append(pr_url)
             except Exception as e:
-                # If we can't check, include it in the list to process
                 typer.echo(f"  Warning: Could not check labels for {pr_url}: {e}", err=True)
                 unlabeled_urls.append(pr_url)
 
@@ -1028,20 +1175,36 @@ def run_batch_analysis_with_labels(
 
             label_applied = None
 
-            # Apply label if requested (and post explanation as PR comment)
-            if label_prs and github_token:
+            # Apply label/comment if requested
+            if label_prs:
                 try:
+                    from .utils import detect_pr_provider
+
+                    pr_provider = detect_pr_provider(pr_url)
                     owner, repo, pr = parse_pr_url(pr_url)
-                    label_applied = update_complexity_label(
-                        owner,
-                        repo,
-                        pr,
-                        complexity,
-                        github_token,
-                        label_prefix,
-                        timeout,
-                        explanation=explanation,
-                    )
+
+                    if pr_provider == "bitbucket":
+                        from .bitbucket import add_bb_pr_comment
+                        from .config import get_bitbucket_credentials
+
+                        bb_email, bb_token = get_bitbucket_credentials()
+                        if bb_email and bb_token:
+                            add_bb_pr_comment(
+                                owner, repo, pr, complexity, explanation,
+                                bb_email, bb_token, timeout,
+                            )
+                            label_applied = f"complexity:{complexity}"
+                    elif github_token:
+                        label_applied = update_complexity_label(
+                            owner,
+                            repo,
+                            pr,
+                            complexity,
+                            github_token,
+                            label_prefix,
+                            timeout,
+                            explanation=explanation,
+                        )
                 except Exception as label_error:
                     typer.echo(
                         f"  Warning: Failed to apply label to {pr_url}: {label_error}", err=True
@@ -1096,6 +1259,7 @@ def run_batch_analysis_with_labels(
                             created_at=created_at,
                             lines_added=lines_added,
                             lines_deleted=lines_deleted,
+                            source=result.get("source"),
                         )
 
                     if label_applied:
@@ -1160,6 +1324,7 @@ def run_batch_analysis_with_labels(
                                     created_at=created_at,
                                     lines_added=lines_added,
                                     lines_deleted=lines_deleted,
+                                    source=result.get("source"),
                                 )
 
                             with completed_lock:

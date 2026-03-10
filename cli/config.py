@@ -125,6 +125,20 @@ def get_bedrock_config() -> tuple[str, str]:
     return (region, model_id)
 
 
+def get_bitbucket_credentials() -> tuple[Optional[str], Optional[str]]:
+    """Get Bitbucket credentials from environment.
+
+    Returns:
+        Tuple of (email, api_token). Either may be None if not set.
+    """
+    email = os.getenv("BITBUCKET_EMAIL")
+    token = (
+        os.getenv("BITBUCKET_API_TOKEN")
+        or os.getenv("BITBUCKET_APP_PASSWORD")
+    )
+    return email, token
+
+
 def validate_owner_repo(owner: str, repo: str) -> None:
     """Validate owner and repo names."""
     pattern = re.compile(r"^[A-Za-z0-9_.-]+$")

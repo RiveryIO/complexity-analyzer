@@ -5,28 +5,58 @@ from typing import Dict, List, Optional, Tuple
 
 from .constants import GITHUB_API_VERSION, TOKEN_VISIBLE_CHARS
 
-# Regex to parse PR URL
-_OWNER_REPO_RE = re.compile(r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
+# Regex to parse PR URLs
+_GITHUB_PR_RE = re.compile(
+    r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)"
+)
+_BITBUCKET_PR_RE = re.compile(
+    r"https?://bitbucket\.org/([^/\s]+)/([^/\s]+)/pull-requests/(\d+)"
+)
+
+# Keep legacy name for backward compat in tests
+_OWNER_REPO_RE = _GITHUB_PR_RE
+
+
+def detect_pr_provider(url: str) -> str:
+    """Detect whether a PR URL is from GitHub or Bitbucket.
+
+    Returns:
+        "github" or "bitbucket"
+
+    Raises:
+        ValueError: If URL is not a recognized PR URL
+    """
+    url = url.strip()
+    if _GITHUB_PR_RE.match(url):
+        return "github"
+    if _BITBUCKET_PR_RE.match(url):
+        return "bitbucket"
+    raise ValueError(f"Unrecognized PR URL (not GitHub or Bitbucket): {url}")
 
 
 def parse_pr_url(url: str) -> Tuple[str, str, int]:
     """
-    Parse owner, repo, and PR number from GitHub PR URL.
+    Parse owner/workspace, repo, and PR number from a PR URL.
 
     Args:
-        url: GitHub PR URL (e.g., "https://github.com/owner/repo/pull/123")
+        url: PR URL from either platform:
+            - GitHub:    https://github.com/owner/repo/pull/123
+            - Bitbucket: https://bitbucket.org/workspace/repo/pull-requests/123
 
     Returns:
-        Tuple of (owner, repo, pr_number)
+        Tuple of (owner_or_workspace, repo, pr_number)
 
     Raises:
         ValueError: If URL format is invalid
     """
-    m = _OWNER_REPO_RE.match(url.strip())
-    if not m:
-        raise ValueError(f"Invalid PR URL: {url}")
-    owner, repo, pr_str = m.group(1), m.group(2), m.group(3)
-    return owner, repo, int(pr_str)
+    url = url.strip()
+    m = _GITHUB_PR_RE.match(url)
+    if m:
+        return m.group(1), m.group(2), int(m.group(3))
+    m = _BITBUCKET_PR_RE.match(url)
+    if m:
+        return m.group(1), m.group(2), int(m.group(3))
+    raise ValueError(f"Invalid PR URL: {url}")
 
 
 def build_github_headers(token: Optional[str] = None) -> Dict[str, str]:

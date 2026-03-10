@@ -5,6 +5,7 @@ import pytest
 from cli.utils import (
     build_github_diff_headers,
     build_github_headers,
+    detect_pr_provider,
     parse_pr_url,
     redact_token,
     setup_github_tokens,
@@ -62,6 +63,41 @@ class TestParsePrUrl:
         """Test that URL without PR number raises ValueError."""
         with pytest.raises(ValueError, match="Invalid PR URL"):
             parse_pr_url("https://github.com/owner/repo/pull/")
+
+    def test_bitbucket_url(self):
+        """Test parsing a Bitbucket PR URL."""
+        workspace, repo, pr = parse_pr_url(
+            "https://bitbucket.org/myworkspace/myrepo/pull-requests/42"
+        )
+        assert workspace == "myworkspace"
+        assert repo == "myrepo"
+        assert pr == 42
+
+    def test_bitbucket_url_with_trailing_whitespace(self):
+        """Test parsing Bitbucket URL with trailing whitespace."""
+        workspace, repo, pr = parse_pr_url(
+            "  https://bitbucket.org/ws/repo/pull-requests/99  "
+        )
+        assert workspace == "ws"
+        assert repo == "repo"
+        assert pr == 99
+
+
+class TestDetectPrProvider:
+    """Tests for detect_pr_provider function."""
+
+    def test_github(self):
+        assert detect_pr_provider("https://github.com/owner/repo/pull/1") == "github"
+
+    def test_bitbucket(self):
+        assert (
+            detect_pr_provider("https://bitbucket.org/ws/repo/pull-requests/1")
+            == "bitbucket"
+        )
+
+    def test_unknown_raises(self):
+        with pytest.raises(ValueError, match="Unrecognized PR URL"):
+            detect_pr_provider("https://gitlab.com/owner/repo/merge_requests/1")
 
 
 class TestBuildGithubHeaders:
