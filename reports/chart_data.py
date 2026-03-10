@@ -1,5 +1,6 @@
 """Export all report data as JSON for dynamic ECharts rendering. Reuses report logic."""
 
+from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
@@ -433,12 +434,149 @@ def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return charts
 
 
+def _extract_features() -> Dict[str, Any]:
+    """Build chart data + raw table data from features-released.csv."""
+    csv_path = Path(__file__).resolve().parent.parent / "features-released.csv"
+    if not csv_path.exists():
+        return {"charts": [], "rows": []}
+
+    df = pd.read_csv(csv_path, dtype=str).fillna("")
+    if df.empty:
+        return {"charts": [], "rows": []}
+
+    df["released_date"] = pd.to_datetime(df["released_date"], errors="coerce")
+    df = df.dropna(subset=["released_date"])
+    df["month"] = df["released_date"].dt.to_period("M")
+
+    rows_for_table = []
+    for _, r in df.iterrows():
+        rows_for_table.append({
+            "feature_id": r.get("feature_id", ""),
+            "feature_name": r.get("feature_name", ""),
+            "jira_keys": r.get("jira_keys", ""),
+            "team": r.get("team", ""),
+            "category": r.get("category", ""),
+            "is_user_facing": r.get("is_user_facing", ""),
+            "released_date": r["released_date"].strftime("%Y-%m-%d"),
+            "month": str(r["month"]),
+            "ticket_count": r.get("ticket_count", ""),
+            "lead_time_days": r.get("lead_time_days", ""),
+            "story_points": r.get("story_points", ""),
+            "description": r.get("description", ""),
+        })
+
+    charts: List[Dict[str, Any]] = []
+
+    # 1: Features per month — All teams
+    monthly = df.groupby("month").size()
+    if not monthly.empty:
+        labels = [str(p) for p in monthly.index]
+        charts.append({
+            "id": "feat-monthly-all",
+            "type": "bar",
+            "title": "Features Released per Month — All Teams",
+            "subtitle": "Click a bar to see the features for that month",
+            "x": labels,
+            "y": monthly.tolist(),
+            "drilldown": True,
+        })
+
+    # 2: User-facing features per month — All teams
+    uf = df[df["is_user_facing"] == "true"]
+    uf_monthly = uf.groupby("month").size()
+    if not uf_monthly.empty:
+        labels = [str(p) for p in uf_monthly.index]
+        charts.append({
+            "id": "feat-uf-monthly-all",
+            "type": "bar",
+            "title": "User-Facing Features per Month — All Teams",
+            "subtitle": "Click a bar to drill into the feature list",
+            "x": labels,
+            "y": uf_monthly.tolist(),
+            "drilldown": True,
+            "filter": {"is_user_facing": "true"},
+        })
+
+    # 3: Features per month by team (stacked bar)
+    teams = sorted(df["team"].unique())
+    if teams:
+        all_months = sorted(df["month"].unique())
+        series = []
+        for team in teams:
+            tdf = df[df["team"] == team]
+            counts = tdf.groupby("month").size().reindex(all_months, fill_value=0)
+            series.append({"name": team, "data": counts.tolist()})
+        charts.append({
+            "id": "feat-monthly-team",
+            "type": "stackedBar",
+            "title": "Features Released per Month — By Team",
+            "subtitle": "Click a bar segment to see that team's features",
+            "x": [str(m) for m in all_months],
+            "series": series,
+            "drilldown": True,
+        })
+
+    # 4: Category breakdown per month (stacked bar)
+    categories = ["feature", "bug_fix", "improvement", "tech_debt"]
+    all_months = sorted(df["month"].unique())
+    cat_series = []
+    for cat in categories:
+        cdf = df[df["category"] == cat]
+        counts = cdf.groupby("month").size().reindex(all_months, fill_value=0)
+        cat_series.append({"name": cat, "data": counts.tolist()})
+    charts.append({
+        "id": "feat-category-monthly",
+        "type": "stackedBar",
+        "title": "Feature Categories per Month",
+        "subtitle": "Feature vs bug_fix vs improvement vs tech_debt",
+        "x": [str(m) for m in all_months],
+        "series": cat_series,
+        "drilldown": True,
+    })
+
+    # 5: Per-team monthly line charts
+    for team in teams:
+        tdf = df[df["team"] == team]
+        t_monthly = tdf.groupby("month").size()
+        if not t_monthly.empty:
+            charts.append({
+                "id": f"feat-monthly-{team.lower()}",
+                "type": "bar",
+                "title": f"Features Released per Month — {team}",
+                "subtitle": f"Click a bar to drill into {team}'s features",
+                "x": [str(p) for p in t_monthly.index],
+                "y": t_monthly.tolist(),
+                "drilldown": True,
+                "filter": {"team": team},
+            })
+
+    # 6: Average lead time per month
+    df_lt = df[df["lead_time_days"] != ""].copy()
+    df_lt["lead_time_days"] = pd.to_numeric(df_lt["lead_time_days"], errors="coerce")
+    df_lt = df_lt.dropna(subset=["lead_time_days"])
+    if not df_lt.empty:
+        avg_lt = df_lt.groupby("month")["lead_time_days"].mean()
+        charts.append({
+            "id": "feat-lead-time",
+            "type": "line",
+            "title": "Average Lead Time per Month",
+            "subtitle": "Days from first ticket created to feature released",
+            "x": [str(p) for p in avg_lt.index],
+            "y": [round(v, 1) for v in avg_lt.tolist()],
+        })
+
+    return {"charts": charts, "rows": rows_for_table}
+
+
 def build_all_chart_data(df: pd.DataFrame) -> Dict[str, List[Dict[str, Any]]]:
     """Build chart data for all tabs. Returns {tab: [chart_data, ...]}."""
+    features_data = _extract_features()
     return {
         "basic": _extract_basic(df),
         "team": _extract_team(df),
         "risk": _extract_risk(df),
         "fairness": _extract_fairness(df),
         "advanced": _extract_advanced(df),
+        "features": features_data.get("charts", []),
+        "_features_rows": features_data.get("rows", []),
     }

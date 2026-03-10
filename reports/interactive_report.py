@@ -33,7 +33,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   <title>Engineering Velocity — Complexity Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
   <style>
     :root {{
@@ -334,6 +334,263 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       color: var(--text-muted);
       border: 1px solid var(--border);
     }}
+
+    /* Drilldown modal overlay */
+    .drilldown-overlay {{
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(20, 22, 28, 0.55);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 4vh 2rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }}
+    .drilldown-overlay.open {{
+      opacity: 1;
+      pointer-events: auto;
+    }}
+    .drilldown-modal {{
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 1280px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.06);
+      transform: translateY(12px);
+      transition: transform 0.25s ease;
+    }}
+    .drilldown-overlay.open .drilldown-modal {{
+      transform: translateY(0);
+    }}
+    .drilldown-header {{
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }}
+    .drilldown-header h2 {{
+      font-family: 'Syne', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }}
+    .drilldown-header .dd-count {{
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-left: 0.6rem;
+      font-weight: 400;
+    }}
+    .drilldown-close {{
+      width: 32px; height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }}
+    .drilldown-close:hover {{
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: var(--accent);
+    }}
+    .drilldown-body {{
+      flex: 1;
+      overflow: auto;
+      padding: 0;
+    }}
+    .dd-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }}
+    .dd-table thead {{
+      position: sticky; top: 0;
+      background: var(--bg-elevated);
+      z-index: 1;
+    }}
+    .dd-table th {{
+      font-family: 'Syne', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      padding: 0.7rem 0.8rem;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 2px solid var(--border);
+    }}
+    .dd-table td {{
+      padding: 0.6rem 0.8rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      max-width: 300px;
+    }}
+    .dd-table tr:hover td {{
+      background: rgba(180, 83, 9, 0.04);
+    }}
+    .dd-table .cell-id {{
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.78rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }}
+    .dd-table .cell-id a {{
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.15s, background 0.15s;
+      padding: 0.1rem 0.3rem;
+      border-radius: 4px;
+      margin: -0.1rem -0.3rem;
+    }}
+    .dd-table .cell-id a:hover {{
+      background: var(--accent-dim);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }}
+    .dd-table .cell-id a::after {{
+      content: '\u2009\u2197';
+      font-size: 0.65rem;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }}
+    .dd-table .cell-id a:hover::after {{
+      opacity: 0.7;
+    }}
+    .cell-tickets {{
+      max-width: 260px;
+    }}
+    .ticket-pill {{
+      display: inline-block;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: #0d9488;
+      background: rgba(13, 148, 136, 0.08);
+      border: 1px solid rgba(13, 148, 136, 0.15);
+      padding: 0.08rem 0.35rem;
+      border-radius: 4px;
+      margin: 0.1rem 0.15rem 0.1rem 0;
+      text-decoration: none;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }}
+    .ticket-pill:hover {{
+      background: rgba(13, 148, 136, 0.16);
+      border-color: rgba(13, 148, 136, 0.35);
+      color: #065f46;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }}
+    .ticket-overflow {{
+      display: inline-block;
+      font-family: 'Syne', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      padding: 0.08rem 0.35rem;
+      border-radius: 4px;
+      margin: 0.1rem 0;
+      cursor: default;
+    }}
+    .dd-table .cell-name {{
+      font-weight: 500;
+      color: var(--text);
+      max-width: 420px;
+      position: relative;
+    }}
+    .dd-table .cell-name .name-text {{
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      transition: all 0.2s ease;
+      cursor: default;
+    }}
+    .dd-table tr:hover .cell-name .name-text {{
+      -webkit-line-clamp: unset;
+      overflow: visible;
+      color: var(--accent);
+    }}
+    .dd-badge {{
+      display: inline-block;
+      font-size: 0.65rem;
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.12rem 0.45rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }}
+    .dd-badge.cat-feature {{ background: #dbeafe; color: #1e40af; }}
+    .dd-badge.cat-bug_fix {{ background: #fee2e2; color: #991b1b; }}
+    .dd-badge.cat-improvement {{ background: #d1fae5; color: #065f46; }}
+    .dd-badge.cat-tech_debt {{ background: #e5e7eb; color: #374151; }}
+    .dd-badge.uf-true {{ background: #fef3c7; color: #92400e; }}
+    .dd-badge.uf-false {{ background: #f3f4f6; color: #6b7280; }}
+    .chart-card.drilldown-enabled {{
+      cursor: pointer;
+    }}
+    .chart-card.drilldown-enabled:hover {{
+      border-color: rgba(180, 83, 9, 0.35);
+      box-shadow: 0 4px 20px rgba(180, 83, 9, 0.10);
+    }}
+    .chart-card .drill-hint {{
+      font-size: 0.7rem;
+      color: var(--accent);
+      opacity: 0.6;
+      font-family: 'Syne', sans-serif;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      margin-top: 0.4rem;
+      transition: opacity 0.2s;
+    }}
+    .chart-card.drilldown-enabled:hover .drill-hint {{
+      opacity: 1;
+    }}
+
+    /* Features summary cards */
+    .feat-summary {{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }}
+    .feat-stat {{
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      transition: box-shadow 0.2s;
+    }}
+    .feat-stat:hover {{
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    }}
+    .feat-stat .stat-value {{
+      font-family: 'Syne', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }}
+    .feat-stat .stat-label {{
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 0.3rem;
+    }}
   </style>
 </head>
 <body>
@@ -356,10 +613,21 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <div id="search-results"></div>
   </div>
 
+  <!-- Drilldown modal -->
+  <div class="drilldown-overlay" id="drilldown-overlay">
+    <div class="drilldown-modal">
+      <div class="drilldown-header">
+        <h2 id="dd-title">Features</h2>
+        <button class="drilldown-close" id="dd-close">&times;</button>
+      </div>
+      <div class="drilldown-body" id="dd-body"></div>
+    </div>
+  </div>
+
   <script>
     const chartData = {chart_data_json};
-    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced', 'todo'];
-    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced', todo: 'Roadmap' }};
+    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced', 'features', 'todo'];
+    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced', features: 'Features', todo: 'Roadmap' }};
 
     const CHART_THEME = {{
       backgroundColor: 'transparent',
@@ -753,6 +1021,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       }}
     ];
 
+    const featuresRows = chartData['_features_rows'] || [];
+
     tabOrder.forEach((key, i) => {{
       const panel = document.createElement('div');
       panel.id = 'panel-' + key;
@@ -781,16 +1051,36 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       }}
 
       const charts = chartData[key] || [];
-      let html = '<div class="grid">';
+
+      let summaryHtml = '';
+      if (key === 'features' && featuresRows.length) {{
+        const total = featuresRows.length;
+        const uf = featuresRows.filter(r => r.is_user_facing === 'true').length;
+        const feats = featuresRows.filter(r => r.category === 'feature').length;
+        const bugs = featuresRows.filter(r => r.category === 'bug_fix').length;
+        const teams = [...new Set(featuresRows.map(r => r.team))].length;
+        summaryHtml = `<div class="feat-summary">
+          <div class="feat-stat"><div class="stat-value">${{total}}</div><div class="stat-label">Total features</div></div>
+          <div class="feat-stat"><div class="stat-value">${{uf}}</div><div class="stat-label">User-facing</div></div>
+          <div class="feat-stat"><div class="stat-value">${{feats}}</div><div class="stat-label">New features</div></div>
+          <div class="feat-stat"><div class="stat-value">${{bugs}}</div><div class="stat-label">Bug fixes</div></div>
+          <div class="feat-stat"><div class="stat-value">${{teams}}</div><div class="stat-label">Teams</div></div>
+        </div>`;
+      }}
+
+      let html = summaryHtml + '<div class="grid">';
       charts.forEach((c, idx) => {{
         const id = 'chart-' + key + '-' + idx;
         const hasPicker = c.hasPicker && c.series && c.series.length > 6;
-        const cardClass = hasPicker ? 'chart-card has-picker' : 'chart-card';
+        const isDrill = c.drilldown === true;
+        let cardClass = hasPicker ? 'chart-card has-picker' : 'chart-card';
+        if (isDrill) cardClass += ' drilldown-enabled';
         const pickerHtml = hasPicker
           ? `<div class="picker-panel" id="${{id}}-picker"></div>`
           : '';
         const spanStyle = hasPicker ? ' style="grid-column:1/-1"' : '';
-        html += `<div class="${{cardClass}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}</div><div id="${{id}}" class="chart-container"></div>${{pickerHtml}}</div>`;
+        const drillHint = isDrill ? '<div class="drill-hint">\u25B6 Click chart to view features</div>' : '';
+        html += `<div class="${{cardClass}}" data-chart-idx="${{idx}}" data-chart-tab="${{key}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}</div><div id="${{id}}" class="chart-container"></div>${{drillHint}}${{pickerHtml}}</div>`;
       }});
       html += '</div>';
       panel.innerHTML = html;
@@ -802,7 +1092,16 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         const el = document.getElementById(id);
         if (el) {{
           const ch = renderChart(el, c);
-          if (ch) chartInstances[key].push(ch);
+          if (ch) {{
+            chartInstances[key].push(ch);
+            if (c.drilldown) {{
+              ch.on('click', function(params) {{
+                const month = params.name || (params.data && params.data[0]);
+                const seriesName = params.seriesName || '';
+                openDrilldown(month, c, seriesName);
+              }});
+            }}
+          }}
         }}
       }});
     }});
@@ -885,6 +1184,105 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       searchEl.value = '';
       doSearch('');
       searchEl.focus();
+    }});
+
+    // Drilldown modal logic
+    const ddOverlay = document.getElementById('drilldown-overlay');
+    const ddTitle = document.getElementById('dd-title');
+    const ddBody = document.getElementById('dd-body');
+    const ddClose = document.getElementById('dd-close');
+
+    function openDrilldown(month, chartConfig, seriesName) {{
+      let filtered = featuresRows.filter(r => r.month === month);
+      let title = `Features \u2014 ${{month}}`;
+
+      if (chartConfig.filter) {{
+        Object.entries(chartConfig.filter).forEach(([k, v]) => {{
+          filtered = filtered.filter(r => r[k] === v);
+        }});
+        if (chartConfig.filter.team) title += ` \u2014 ${{chartConfig.filter.team}}`;
+        if (chartConfig.filter.is_user_facing === 'true') title = `User-Facing ${{title}}`;
+      }}
+
+      if (seriesName && !chartConfig.filter) {{
+        const teamMatch = filtered.filter(r => r.team === seriesName);
+        const catMatch = filtered.filter(r => r.category === seriesName);
+        if (teamMatch.length > 0 && teamMatch.length < filtered.length) {{
+          filtered = teamMatch;
+          title += ` \u2014 ${{seriesName}}`;
+        }} else if (catMatch.length > 0 && catMatch.length < filtered.length) {{
+          filtered = catMatch;
+          title += ` \u2014 ${{seriesName}}`;
+        }}
+      }}
+
+      filtered.sort((a, b) => b.released_date.localeCompare(a.released_date));
+
+      ddTitle.innerHTML = `${{title}}<span class="dd-count">${{filtered.length}} item${{filtered.length !== 1 ? 's' : ''}}</span>`;
+
+      const catBadge = (c) => `<span class="dd-badge cat-${{c}}">${{c.replace('_', ' ')}}</span>`;
+      const ufBadge = (v) => v === 'true'
+        ? '<span class="dd-badge uf-true">User-facing</span>'
+        : '<span class="dd-badge uf-false">Internal</span>';
+
+      const JIRA_BASE = 'https://boomii.atlassian.net/browse/';
+      const isJiraKey = (k) => /^[A-Z]{{2,}}-\\d+$/.test(k);
+      const jiraLink = (key) => isJiraKey(key)
+        ? `<a href="${{JIRA_BASE}}${{key}}" target="_blank" rel="noopener">${{key}}</a>`
+        : key;
+      const ticketPills = (raw) => {{
+        if (!raw) return '\u2014';
+        const keys = raw.split('|').filter(Boolean);
+        const MAX_SHOW = 3;
+        const shown = keys.slice(0, MAX_SHOW);
+        const rest = keys.length - MAX_SHOW;
+        let html = shown.map(k =>
+          `<a class="ticket-pill" href="${{JIRA_BASE}}${{k}}" target="_blank" rel="noopener">${{k}}</a>`
+        ).join('');
+        if (rest > 0) html += `<span class="ticket-overflow">+${{rest}}</span>`;
+        return html;
+      }};
+
+      let tableHtml = `<table class="dd-table">
+        <thead><tr>
+          <th>Epic</th><th>Name</th><th>Tickets</th><th>Team</th><th>Category</th>
+          <th>Visibility</th><th>Released</th><th>Lead Time</th>
+        </tr></thead><tbody>`;
+
+      filtered.forEach(r => {{
+        const lt = r.lead_time_days ? `${{r.lead_time_days}}d` : '\u2014';
+        tableHtml += `<tr>
+          <td class="cell-id">${{jiraLink(r.feature_id)}}</td>
+          <td class="cell-name"><span class="name-text">${{r.feature_name}}</span></td>
+          <td class="cell-tickets">${{ticketPills(r.jira_keys)}}</td>
+          <td>${{r.team}}</td>
+          <td>${{catBadge(r.category)}}</td>
+          <td>${{ufBadge(r.is_user_facing)}}</td>
+          <td style="white-space:nowrap">${{r.released_date}}</td>
+          <td style="text-align:right">${{lt}}</td>
+        </tr>`;
+      }});
+
+      tableHtml += '</tbody></table>';
+
+      if (filtered.length === 0) {{
+        tableHtml = '<div style="padding:3rem;text-align:center;color:var(--text-muted);font-size:0.9rem;">No features found for this selection.</div>';
+      }}
+
+      ddBody.innerHTML = tableHtml;
+      ddOverlay.classList.add('open');
+    }}
+
+    function closeDrilldown() {{
+      ddOverlay.classList.remove('open');
+    }}
+
+    ddClose.addEventListener('click', closeDrilldown);
+    ddOverlay.addEventListener('click', (e) => {{
+      if (e.target === ddOverlay) closeDrilldown();
+    }});
+    document.addEventListener('keydown', (e) => {{
+      if (e.key === 'Escape') closeDrilldown();
     }});
   </script>
 </body>
