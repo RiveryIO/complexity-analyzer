@@ -504,20 +504,20 @@ def _extract_features() -> Dict[str, Any]:
             "drilldown": True,
         })
 
-    # 4: Category breakdown per month (stacked bar — excludes bug_fix)
-    categories = ["feature", "improvement", "tech_debt"]
-    all_months = sorted(df_feat["month"].unique())
+    # 4: Category breakdown per month (stacked bar — all categories)
+    categories = ["feature", "improvement", "tech_debt", "bug_fix"]
+    all_months_full = sorted(df["month"].unique())
     cat_series = []
     for cat in categories:
-        cdf = df_feat[df_feat["category"] == cat]
-        counts = cdf.groupby("month").size().reindex(all_months, fill_value=0)
+        cdf = df[df["category"] == cat]
+        counts = cdf.groupby("month").size().reindex(all_months_full, fill_value=0)
         cat_series.append({"name": cat, "data": counts.tolist()})
     charts.append({
         "id": "feat-category-monthly",
         "type": "stackedBar",
         "title": "Feature Categories per Month",
-        "subtitle": "Feature vs improvement vs tech_debt (bug fixes excluded)",
-        "x": [str(m) for m in all_months],
+        "subtitle": "Feature vs improvement vs tech_debt vs bug_fix",
+        "x": [str(m) for m in all_months_full],
         "series": cat_series,
         "drilldown": True,
     })
