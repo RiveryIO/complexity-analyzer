@@ -84,6 +84,38 @@ def test_load_team_mapping_teams_txt(tmp_path, monkeypatch):
     assert mapping == expected
 
 
+def test_load_team_mapping_github_teams_cfg(tmp_path, monkeypatch):
+    """Test load_team_mapping from github-teams.cfg (preferred filename)."""
+    teams_file = tmp_path / "github-teams.cfg"
+    teams_file.write_text(
+        """
+[Platform]
+alice
+bob
+[Backend]
+dave
+"""
+    )
+    monkeypatch.chdir(tmp_path)
+    mapping = load_team_mapping(tmp_path)
+    expected = {
+        "alice": "Platform",
+        "bob": "Platform",
+        "dave": "Backend",
+    }
+    assert mapping == expected
+
+
+def test_load_team_mapping_github_teams_cfg_takes_priority(tmp_path, monkeypatch):
+    """github-teams.cfg is loaded before teams.yaml."""
+    (tmp_path / "github-teams.cfg").write_text("[Alpha] alice\n[Beta] bob")
+    (tmp_path / "teams.yaml").write_text("[Gamma] charlie\n[Delta] dave")
+    monkeypatch.chdir(tmp_path)
+    mapping = load_team_mapping(tmp_path)
+    assert "alice" in mapping
+    assert "charlie" not in mapping
+
+
 def test_load_team_mapping_teams_cfg_multiline(tmp_path, monkeypatch):
     """Test load_team_mapping from teams.cfg with developers on separate lines."""
     teams_file = tmp_path / "teams.cfg"

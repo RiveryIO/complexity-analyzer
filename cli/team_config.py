@@ -96,7 +96,10 @@ def _load_teams_txt(path: Path) -> Optional[Dict[str, str]]:
 
 def load_team_mapping(cwd: Optional[Path] = None) -> Dict[str, str]:
     """
-    Load developer-to-team mapping from teams.yaml, teams.cfg, or teams.txt.
+    Load developer-to-team mapping from a config file.
+
+    Searches (in order): github-teams.cfg, github-teams.yaml,
+    teams.yaml, teams.yml, teams.cfg, teams.txt.
 
     Format: [TeamName] followed by developers (same line or subsequent lines until next [Team]):
         [Platform]
@@ -111,7 +114,15 @@ def load_team_mapping(cwd: Optional[Path] = None) -> Dict[str, str]:
         Dict mapping "developer" -> "Team Name"
     """
     base = cwd or Path.cwd()
-    for name in ("teams.yaml", "teams.yml", "teams.cfg", "teams.txt"):
+    candidates = (
+        "github-teams.cfg",
+        "github-teams.yaml",
+        "teams.yaml",
+        "teams.yml",
+        "teams.cfg",
+        "teams.txt",
+    )
+    for name in candidates:
         path = base / name
         if path.suffix in (".yaml", ".yml"):
             result = _load_teams_yaml(path)

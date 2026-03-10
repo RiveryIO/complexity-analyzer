@@ -185,6 +185,6 @@ python scripts/jira_features_to_csv.py --input features.json --dry-run
 
 ## Notes
 
-- The Bots team from `teams.cfg` is excluded (no Jira board for bots).
+- The Bots team from `github-teams.cfg` is excluded (no Jira board for bots).
 - Derived columns (`lead_time_days`, `quarter`, `iso_week`) are computed by `jira_features_to_csv.py`, not by the agent.
 - Re-running is safe: features are upserted by `feature_id`, so re-classification updates existing rows.

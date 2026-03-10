@@ -1082,6 +1082,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           <div class="feat-stat"><div class="stat-value">${{impr}}</div><div class="stat-label">Improvements</div></div>
           <div class="feat-stat"><div class="stat-value">${{bugs}}</div><div class="stat-label">Bug fixes</div></div>
           <div class="feat-stat"><div class="stat-value">${{teams}}</div><div class="stat-label">Teams</div></div>
+        </div>
+        <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 16px;margin:0 0 16px;display:flex;align-items:center;gap:8px;font-size:13px;color:#92400e;">
+          <span style="font-size:16px;">&#9888;&#65039;</span>
+          <span><strong>Alpha</strong> &mdash; Feature data is AI-classified and may contain inaccuracies. Please validate before drawing conclusions.</span>
         </div>`;
       }}
 

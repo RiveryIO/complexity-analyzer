@@ -1,5 +1,5 @@
 # Team mapping: [TeamName] followed by developers (same line or one per line)
-# Copy to teams.cfg or teams.yaml and fill in your values.
+# Copy to github-teams.cfg and fill in your GitHub usernames.
 # Enables per-team reports as well as company-wide aggregation.
 #
 # Example:

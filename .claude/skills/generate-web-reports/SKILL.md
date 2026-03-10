@@ -11,7 +11,7 @@ Produces an interactive HTML dashboard (`reports/index.html`) with 20+ dynamic E
 
 - `complexity-report.csv` in project root (from `complexity-cli batch-analyze`)
 - Python packages: `pandas`, `numpy`, `matplotlib`
-- `teams.cfg` must exist for team-level charts
+- `github-teams.cfg` must exist for team-level charts
 
 ## Workflow
 
