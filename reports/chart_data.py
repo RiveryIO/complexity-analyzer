@@ -467,8 +467,12 @@ def _extract_features() -> Dict[str, Any]:
 
     charts: List[Dict[str, Any]] = []
 
+    # Exclude bug_fix from charts — bugs are tracked in the summary tiles
+    # but are not user-facing features for graph purposes.
+    df_feat = df[df["category"] != "bug_fix"]
+
     # 1: Features per month — All teams
-    monthly = df.groupby("month").size()
+    monthly = df_feat.groupby("month").size()
     if not monthly.empty:
         labels = [str(p) for p in monthly.index]
         charts.append({
@@ -482,7 +486,7 @@ def _extract_features() -> Dict[str, Any]:
         })
 
     # 2: User-facing features per month — All teams
-    uf = df[df["is_user_facing"] == "true"]
+    uf = df_feat[df_feat["is_user_facing"] == "true"]
     uf_monthly = uf.groupby("month").size()
     if not uf_monthly.empty:
         labels = [str(p) for p in uf_monthly.index]
@@ -498,12 +502,12 @@ def _extract_features() -> Dict[str, Any]:
         })
 
     # 3: Features per month by team (stacked bar)
-    teams = sorted(df["team"].unique())
+    teams = sorted(df_feat["team"].unique())
     if teams:
-        all_months = sorted(df["month"].unique())
+        all_months = sorted(df_feat["month"].unique())
         series = []
         for team in teams:
-            tdf = df[df["team"] == team]
+            tdf = df_feat[df_feat["team"] == team]
             counts = tdf.groupby("month").size().reindex(all_months, fill_value=0)
             series.append({"name": team, "data": counts.tolist()})
         charts.append({
@@ -516,19 +520,19 @@ def _extract_features() -> Dict[str, Any]:
             "drilldown": True,
         })
 
-    # 4: Category breakdown per month (stacked bar)
-    categories = ["feature", "bug_fix", "improvement", "tech_debt"]
-    all_months = sorted(df["month"].unique())
+    # 4: Category breakdown per month (stacked bar — excludes bug_fix)
+    categories = ["feature", "improvement", "tech_debt"]
+    all_months = sorted(df_feat["month"].unique())
     cat_series = []
     for cat in categories:
-        cdf = df[df["category"] == cat]
+        cdf = df_feat[df_feat["category"] == cat]
         counts = cdf.groupby("month").size().reindex(all_months, fill_value=0)
         cat_series.append({"name": cat, "data": counts.tolist()})
     charts.append({
         "id": "feat-category-monthly",
         "type": "stackedBar",
         "title": "Feature Categories per Month",
-        "subtitle": "Feature vs bug_fix vs improvement vs tech_debt",
+        "subtitle": "Feature vs improvement vs tech_debt (bug fixes excluded)",
         "x": [str(m) for m in all_months],
         "series": cat_series,
         "drilldown": True,
@@ -536,7 +540,7 @@ def _extract_features() -> Dict[str, Any]:
 
     # 5: Per-team monthly line charts
     for team in teams:
-        tdf = df[df["team"] == team]
+        tdf = df_feat[df_feat["team"] == team]
         t_monthly = tdf.groupby("month").size()
         if not t_monthly.empty:
             charts.append({
@@ -550,8 +554,8 @@ def _extract_features() -> Dict[str, Any]:
                 "filter": {"team": team},
             })
 
-    # 6: Average lead time per month
-    df_lt = df[df["lead_time_days"] != ""].copy()
+    # 6: Average lead time per month (features only, no bug fixes)
+    df_lt = df_feat[df_feat["lead_time_days"] != ""].copy()
     df_lt["lead_time_days"] = pd.to_numeric(df_lt["lead_time_days"], errors="coerce")
     df_lt = df_lt.dropna(subset=["lead_time_days"])
     if not df_lt.empty:

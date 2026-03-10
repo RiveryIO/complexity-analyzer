@@ -1207,7 +1207,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     const ddClose = document.getElementById('dd-close');
 
     function openDrilldown(month, chartConfig, seriesName) {{
-      let filtered = featuresRows.filter(r => r.month === month);
+      let filtered = featuresRows.filter(r => r.month === month && r.category !== 'bug_fix');
       let title = `Features \u2014 ${{month}}`;
 
       if (chartConfig.filter) {{
