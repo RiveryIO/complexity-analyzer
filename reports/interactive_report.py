@@ -639,6 +639,18 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       splitLine: {{ lineStyle: {{ color: '#eef0f2' }} }},
     }};
 
+    function syncURL() {{
+      const params = new URLSearchParams();
+      const activeTab = document.querySelector('.tab.active');
+      if (activeTab && activeTab.dataset.tab !== tabOrder[0]) {{
+        params.set('tab', activeTab.dataset.tab);
+      }}
+      const q = document.getElementById('chart-search').value.trim();
+      if (q) params.set('q', q);
+      const qs = params.toString();
+      history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+    }}
+
     const COLORS = ['#b45309', '#0d9488', '#7c3aed', '#2563eb', '#ea580c', '#16a34a', '#dc2626', '#6b7280'];
 
     function renderBar(container, c) {{
@@ -998,6 +1010,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         const panel = document.getElementById('panel-' + key);
         panel.classList.add('active');
         (chartInstances[key] || []).forEach(ch => ch.resize());
+        syncURL();
       }};
       tabsEl.appendChild(btn);
     }});
@@ -1179,10 +1192,11 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       }});
     }}
 
-    searchEl.addEventListener('input', () => doSearch(searchEl.value));
+    searchEl.addEventListener('input', () => {{ doSearch(searchEl.value); syncURL(); }});
     clearBtn.addEventListener('click', () => {{
       searchEl.value = '';
       doSearch('');
+      syncURL();
       searchEl.focus();
     }});
 
@@ -1284,6 +1298,21 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     document.addEventListener('keydown', (e) => {{
       if (e.key === 'Escape') closeDrilldown();
     }});
+
+    // Restore state from URL on load
+    (function restoreFromURL() {{
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab && tabOrder.includes(tab)) {{
+        const btn = document.querySelector(`.tab[data-tab="${{tab}}"]`);
+        if (btn) btn.click();
+      }}
+      const q = params.get('q');
+      if (q) {{
+        searchEl.value = q;
+        doSearch(q);
+      }}
+    }})();
   </script>
 </body>
 </html>
