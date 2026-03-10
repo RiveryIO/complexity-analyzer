@@ -43,11 +43,13 @@ Proposed board mapping:
 
 For each team/board in `jira-teams.yaml`:
 
-1. Build the JQL query, **excluding QA assignees** listed in `settings.excluded_assignees`:
+1. Build the JQL query using the team's `jira_projects` list, **excluding QA assignees** listed in `settings.excluded_assignees`:
 
 ```
-project = <board_project> AND status in ("Done", "Closed", "Released") AND resolved >= "-{days}d" AND assignee NOT IN ("Nastia Feigin")
+project IN (<jira_projects>) AND status in ("Done", "Closed", "Released") AND resolved >= "-{days}d" AND assignee NOT IN ("Nastia Feigin")
 ```
+
+For example, if a team has `jira_projects: [CORE, AMC, KH]`, the JQL becomes `project IN (CORE, AMC, KH) AND ...`.
 
 Default `{days}` is from `settings.default_lookback_days` (90). Override with user-supplied value.
 Build the `NOT IN` clause dynamically from `settings.excluded_assignees` in `jira-teams.yaml`.

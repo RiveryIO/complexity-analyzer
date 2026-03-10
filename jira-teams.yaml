@@ -1,24 +1,34 @@
 # Jira board-to-team mapping for feature velocity tracking.
 # Board IDs discovered via jira_get_agile_boards MCP on 2026-03-10.
 # Re-run the jira-features skill with "discover boards" to refresh.
+#
+# Each team has a list of jira_projects (used in JQL) and an optional
+# board_id/board_name for sprint-level queries. The first project in
+# the list is the primary one.
 
 teams:
   Core:
+    jira_projects: [CORE, AMC, KH]
     board_id: 6699
     board_name: "CORE board"
   FullStack:
+    jira_projects: [FULL]
     board_id: 6687
     board_name: "FULL board"
   Integration:
+    jira_projects: []
     board_id: 6702
-    board_name: "Integrations Team"
+    board_name: "Integrations Team (inactive — 0 board issues)"
   CDC:
+    jira_projects: [DCI]
     board_id: 6675
     board_name: "Database & CDC Integration (Ardal team)"
   Ninja:
+    jira_projects: [RSUP]
     board_id: 7968
     board_name: "Ninja Team"
   Devops:
+    jira_projects: [DEV]
     board_id: 3947
     board_name: "Heimdall scrum (Devops)"
 
