@@ -53,7 +53,7 @@ from .llm import LLMError, create_llm_provider  # noqa: E402
 from .logging_config import get_logger, setup_logging  # noqa: E402
 from .preprocess import make_prompt_input, process_diff  # noqa: E402
 from .scoring import InvalidResponseError  # noqa: E402
-from .utils import parse_pr_url  # noqa: E402
+from .utils import detect_pr_provider, parse_pr_url  # noqa: E402
 
 app = typer.Typer(help="Analyze GitHub PR complexity using LLMs")
 
@@ -62,6 +62,7 @@ logger = get_logger()
 
 # Keep regex for direct URL validation in main callback
 _OWNER_REPO_RE = re.compile(r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
+_BB_PR_RE = re.compile(r"https?://bitbucket\.org/([^/\s]+)/([^/\s]+)/pull-requests/(\d+)")
 
 
 def analyze_pr_to_dict(
@@ -116,13 +117,32 @@ def analyze_pr_to_dict(
         LLMError: If LLM call fails
         InvalidResponseError: If LLM response is invalid
     """
-    # Parse PR URL
+    # Parse PR URL and detect source platform
+    pr_source = detect_pr_provider(pr_url)
     owner, repo, pr = parse_pr_url(pr_url)
     validate_owner_repo(owner, repo)
     validate_pr_number(pr)
 
-    # Fetch PR - use token rotator if available, otherwise use single token
-    if token_rotator:
+    # Fetch PR diff + metadata (route by source platform)
+    if pr_source == "bitbucket":
+        from .bitbucket import fetch_bb_pr
+        from .config import get_bitbucket_credentials
+
+        bb_email, bb_token = get_bitbucket_credentials()
+        if not bb_email or not bb_token:
+            raise ValueError(
+                "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for Bitbucket PRs"
+            )
+        diff_text, meta = fetch_bb_pr(
+            owner,
+            repo,
+            pr,
+            bb_email,
+            bb_token,
+            sleep_s=sleep_seconds,
+            timeout=timeout,
+        )
+    elif token_rotator:
         diff_text, meta = fetch_pr_with_rotation(
             owner,
             repo,
@@ -194,6 +214,7 @@ def analyze_pr_to_dict(
         "created_at": created_at,
         "lines_added": additions,
         "lines_deleted": deletions,
+        "source": pr_source,
     }
 
     return output
@@ -231,7 +252,8 @@ def _analyze_pr_impl(
         setup_logging(verbose=True)
 
     try:
-        # Parse PR URL
+        # Parse PR URL and detect source platform
+        pr_source = detect_pr_provider(pr_url)
         owner, repo, pr = parse_pr_url(pr_url)
         validate_owner_repo(owner, repo)
         validate_pr_number(pr)
@@ -276,9 +298,29 @@ def _analyze_pr_impl(
         if dry_run:
             typer.echo(f"Fetching PR {owner}/{repo}#{pr}...", err=True)
             try:
-                diff_text, meta = fetch_pr(
-                    owner, repo, pr, final_github_token, sleep_s=sleep_seconds
-                )
+                if pr_source == "bitbucket":
+                    from .bitbucket import fetch_bb_pr
+                    from .config import get_bitbucket_credentials
+
+                    bb_email, bb_token = get_bitbucket_credentials()
+                    if not bb_email or not bb_token:
+                        raise ValueError("BITBUCKET_EMAIL and BITBUCKET_API_TOKEN required")
+                    diff_text, meta = fetch_bb_pr(
+                        owner,
+                        repo,
+                        pr,
+                        bb_email,
+                        bb_token,
+                        sleep_s=sleep_seconds,
+                    )
+                else:
+                    diff_text, meta = fetch_pr(
+                        owner,
+                        repo,
+                        pr,
+                        final_github_token,
+                        sleep_s=sleep_seconds,
+                    )
                 title = (meta.get("title") or "").strip()
                 typer.echo(f"PR: {title}", err=True)
                 typer.echo("Processing diff...", err=True)
@@ -296,7 +338,6 @@ def _analyze_pr_impl(
                     ErrorHandler.handle_github_error(e)
                 raise typer.Exit(1)
             except typer.Exit:
-                # Re-raise typer.Exit (success case) without catching it
                 raise
             except (ValueError, RuntimeError) as e:
                 typer.echo(f"Failed to fetch PR: {e}", err=True)
@@ -532,6 +573,12 @@ def batch_analyze(
         "--all-repos",
         help="Dynamically scan all repos the authenticated user has access to (use with --since/--until or --days)",
     ),
+    bb_project: Optional[str] = typer.Option(
+        None,
+        "--bb-project",
+        help='Bitbucket workspace/project-uuid (e.g. "boomii/{4f41797b-...}"). '
+        "Discovers all repos in the project and scans merged PRs.",
+    ),
     org: Optional[str] = typer.Option(
         None, "--org", help="Organization name (for date range search)"
     ),
@@ -647,13 +694,14 @@ def batch_analyze(
     try:
         provider = provider or detect_provider_from_env()
         # Validate inputs
-        if input_file and (org or repos_file or all_repos or since or until):
+        if input_file and (org or repos_file or all_repos or bb_project or since or until):
             typer.echo("Error: Cannot specify both --input-file and date range options", err=True)
             raise typer.Exit(1)
 
-        if sum(bool(x) for x in [org, repos_file, all_repos]) > 1:
+        if sum(bool(x) for x in [org, repos_file, all_repos, bb_project]) > 1:
             typer.echo(
-                "Error: Cannot specify more than one of --org, --repos-file, --all-repos", err=True
+                "Error: Cannot specify more than one of --org, --repos-file, --all-repos, --bb-project",
+                err=True,
             )
             raise typer.Exit(1)
 
@@ -664,14 +712,20 @@ def batch_analyze(
         has_all_repos_date_range = all_repos and (
             bool(since and until) or (days is not None and days > 0)
         )
+        has_bb_project_range = bb_project and (
+            bool(since and until) or (days is not None and days > 0)
+        )
         if (
             not input_file
             and not has_date_range
             and not has_repos_date_range
             and not has_all_repos_date_range
+            and not has_bb_project_range
         ):
             typer.echo(
-                "Error: Must specify either --input-file OR (--org, --since/--until or --days) OR (--repos-file, --since/--until or --days) OR (--all-repos, --since/--until or --days)",
+                "Error: Must specify either --input-file OR (--org, --since/--until or --days) OR "
+                "(--repos-file, --since/--until or --days) OR (--all-repos, --since/--until or --days) OR "
+                "(--bb-project, --since/--until or --days)",
                 err=True,
             )
             raise typer.Exit(1)
@@ -789,7 +843,28 @@ def batch_analyze(
                     next_day = max_merged + timedelta(days=1)
                     since_override = max(since_dt, next_day)
 
-            if all_repos:
+            if bb_project:
+                from .batch import generate_pr_list_from_bb_project
+
+                # For BB, compute since_override from BB rows only
+                from .batch import get_max_merged_for_source
+
+                bb_since_override = None
+                if output_file and not overwrite:
+                    bb_max = get_max_merged_for_source(output_file, "bitbucket")
+                    if bb_max:
+                        bb_next = bb_max + timedelta(days=1)
+                        bb_since_override = max(since_dt, bb_next)
+
+                pr_urls = generate_pr_list_from_bb_project(
+                    bb_project_spec=bb_project,
+                    since=since_dt,
+                    until=until_dt,
+                    cache_file=cache_file,
+                    sleep_seconds=sleep_seconds,
+                    since_override=bb_since_override,
+                )
+            elif all_repos:
                 if not github_token:
                     typer.echo(
                         "Error: GitHub token required for --all-repos. Set GH_TOKEN or run `gh auth login`",

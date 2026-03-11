@@ -11,7 +11,7 @@ from .github import fetch_pr, fetch_pr_with_rotation
 from .io_safety import read_text_file
 from .llm import create_llm_provider
 from .preprocess import make_prompt_input, process_diff
-from .utils import parse_pr_url
+from .utils import detect_pr_provider, parse_pr_url
 
 
 def load_prompt(prompt_file: Optional[Path] = None) -> str:
@@ -71,6 +71,7 @@ def analyze_single_pr(
         raise ValueError("Anthropic API key is required for anthropic provider")
 
     # Parse PR URL
+    pr_source = detect_pr_provider(pr_url)
     owner, repo, pr = parse_pr_url(pr_url)
     validate_owner_repo(owner, repo)
     validate_pr_number(pr)
@@ -80,8 +81,26 @@ def analyze_single_pr(
     if not prompt_text:
         prompt_text = load_prompt()
 
-    # Fetch PR - use token rotator if available, otherwise use single token
-    if config.token_rotator:
+    # Fetch PR diff + metadata (route by source platform)
+    if pr_source == "bitbucket":
+        from .bitbucket import fetch_bb_pr
+        from .config import get_bitbucket_credentials
+
+        bb_email, bb_token = get_bitbucket_credentials()
+        if not bb_email or not bb_token:
+            raise ValueError(
+                "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for Bitbucket PRs"
+            )
+        diff_text, meta = fetch_bb_pr(
+            owner,
+            repo,
+            pr,
+            bb_email,
+            bb_token,
+            sleep_s=config.sleep_seconds,
+            timeout=config.timeout,
+        )
+    elif config.token_rotator:
         diff_text, meta = fetch_pr_with_rotation(
             owner,
             repo,
@@ -141,6 +160,7 @@ def analyze_single_pr(
         "pr": pr,
         "url": pr_url,
         "title": title,
+        "source": pr_source,
     }
 
 
@@ -165,12 +185,31 @@ def handle_dry_run(
         GitHubAPIError: If GitHub API call fails
     """
     # Parse PR URL
+    pr_source = detect_pr_provider(pr_url)
     owner, repo, pr = parse_pr_url(pr_url)
     validate_owner_repo(owner, repo)
     validate_pr_number(pr)
 
-    # Fetch PR
-    if config.token_rotator:
+    # Fetch PR diff + metadata (route by source platform)
+    if pr_source == "bitbucket":
+        from .bitbucket import fetch_bb_pr
+        from .config import get_bitbucket_credentials
+
+        bb_email, bb_token = get_bitbucket_credentials()
+        if not bb_email or not bb_token:
+            raise ValueError(
+                "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required for Bitbucket PRs"
+            )
+        diff_text, meta = fetch_bb_pr(
+            owner,
+            repo,
+            pr,
+            bb_email,
+            bb_token,
+            sleep_s=config.sleep_seconds,
+            timeout=config.timeout,
+        )
+    elif config.token_rotator:
         diff_text, meta = fetch_pr_with_rotation(
             owner,
             repo,
@@ -207,6 +246,7 @@ def handle_dry_run(
         "repo": f"{owner}/{repo}",
         "pr": pr,
         "url": pr_url,
+        "source": pr_source,
     }
 
 

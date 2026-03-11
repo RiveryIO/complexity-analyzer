@@ -31,13 +31,17 @@ class TestAnalyzePrCommand:
         """Test error for invalid PR URL."""
         result = runner.invoke(app, ["analyze-pr", "https://not-a-valid-url"])
         assert result.exit_code != 0
-        assert "Invalid PR URL" in result.output or "Error" in result.output
+        assert (
+            "Invalid PR URL" in result.output
+            or "Unrecognized PR URL" in result.output
+            or "Error" in result.output
+        )
 
     def test_invalid_pr_url_gitlab(self):
         """Test error for GitLab URL."""
         result = runner.invoke(app, ["analyze-pr", "https://gitlab.com/owner/repo/pull/123"])
         assert result.exit_code != 0
-        assert "Invalid PR URL" in result.output
+        assert "Invalid PR URL" in result.output or "Unrecognized PR URL" in result.output
 
     def test_missing_openai_key(self):
         """Test error when OpenAI API key is missing."""

@@ -1,10 +1,11 @@
 #!/bin/bash
 #
-# Incremental PR complexity sync
-# ─────────────────────────────────
-# Finds PRs merged since the latest entry in complexity-report.csv,
-# scores them with an LLM, labels them on GitHub (complexity:N),
-# and appends them to the CSV.
+# Incremental PR complexity sync (GitHub + Bitbucket)
+# ────────────────────────────────────────────────────
+# Pass 1: Finds PRs merged in GitHub repos (from repos.txt),
+#         scores them with an LLM, labels them, appends to CSV.
+# Pass 2: Finds PRs merged in a Bitbucket project,
+#         scores them, posts complexity comments, appends to CSV.
 #
 # Designed to run on a recurring schedule (e.g. daily cron / launchd).
 #
@@ -13,6 +14,8 @@
 #   ./scripts/sync-new-prs.sh --days 7     # override search window
 #   ./scripts/sync-new-prs.sh --workers 5  # override parallelism
 #   DRY_RUN=1 ./scripts/sync-new-prs.sh   # fetch-only, no analysis or labeling
+#   SKIP_GH=1 ./scripts/sync-new-prs.sh   # skip GitHub pass (Bitbucket only)
+#   SKIP_BB=1 ./scripts/sync-new-prs.sh   # skip Bitbucket pass (GitHub only)
 
 set -euo pipefail
 
@@ -23,6 +26,9 @@ cd "$PROJECT_DIR"
 CSV_FILE="complexity-report.csv"
 REPOS_FILE="repos.txt"
 LOG_FILE="logs/sync-$(date +%Y%m%d-%H%M%S).log"
+
+# Bitbucket project spec: workspace/{project-uuid}
+BB_PROJECT="${BB_PROJECT:-boomii/{4f41797b-d5bb-4bd8-9f80-ede75279ffe0}}"
 
 DAYS=14
 WORKERS=3
@@ -75,29 +81,63 @@ echo "Rows before: $ROWS_BEFORE" | tee -a "$LOG_FILE"
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "DRY_RUN=1 — fetching PR list only, no analysis or labeling" | tee -a "$LOG_FILE"
-    complexity-cli batch-analyze \
-        --repos-file "$REPOS_FILE" \
-        --days "$DAYS" \
-        --output "$CSV_FILE" \
-        --fetch-only \
-        --cache "cache/sync-dryrun-$(date +%Y%m%d).txt" \
-        2>&1 | tee -a "$LOG_FILE"
-    echo "Done (dry run). Check the cache file for the PR list." | tee -a "$LOG_FILE"
+    if [[ "${SKIP_GH:-0}" != "1" ]]; then
+        echo "--- GitHub (dry run) ---" | tee -a "$LOG_FILE"
+        complexity-cli batch-analyze \
+            --repos-file "$REPOS_FILE" \
+            --days "$DAYS" \
+            --output "$CSV_FILE" \
+            --fetch-only \
+            --cache "cache/sync-dryrun-gh-$(date +%Y%m%d).txt" \
+            2>&1 | tee -a "$LOG_FILE"
+    fi
+    if [[ "${SKIP_BB:-0}" != "1" ]]; then
+        echo "--- Bitbucket (dry run) ---" | tee -a "$LOG_FILE"
+        complexity-cli batch-analyze \
+            --bb-project "$BB_PROJECT" \
+            --days "$DAYS" \
+            --output "$CSV_FILE" \
+            --fetch-only \
+            --cache "cache/sync-dryrun-bb-$(date +%Y%m%d).txt" \
+            2>&1 | tee -a "$LOG_FILE"
+    fi
+    echo "Done (dry run). Check the cache files for the PR lists." | tee -a "$LOG_FILE"
     exit 0
 fi
 
-CLI_OUTPUT=$(complexity-cli batch-analyze \
-    --repos-file "$REPOS_FILE" \
-    --days "$DAYS" \
-    --output "$CSV_FILE" \
-    --label \
-    --workers "$WORKERS" \
-    --resume \
-    2>&1)
+# ── Pass 1: GitHub ──
+GH_FOUND=0
+if [[ "${SKIP_GH:-0}" != "1" ]]; then
+    echo "--- Pass 1: GitHub ---" | tee -a "$LOG_FILE"
+    GH_OUTPUT=$(complexity-cli batch-analyze \
+        --repos-file "$REPOS_FILE" \
+        --days "$DAYS" \
+        --output "$CSV_FILE" \
+        --label \
+        --workers "$WORKERS" \
+        --resume \
+        2>&1) || true
+    echo "$GH_OUTPUT" | tee -a "$LOG_FILE"
+    GH_FOUND=$(echo "$GH_OUTPUT" | grep -oE 'Found [0-9]+ PRs' | head -1 | grep -oE '[0-9]+' || echo "0")
+fi
 
-echo "$CLI_OUTPUT" | tee -a "$LOG_FILE"
+# ── Pass 2: Bitbucket ──
+BB_FOUND=0
+if [[ "${SKIP_BB:-0}" != "1" ]]; then
+    echo "--- Pass 2: Bitbucket ---" | tee -a "$LOG_FILE"
+    BB_OUTPUT=$(complexity-cli batch-analyze \
+        --bb-project "$BB_PROJECT" \
+        --days "$DAYS" \
+        --output "$CSV_FILE" \
+        --label \
+        --workers "$WORKERS" \
+        --resume \
+        2>&1) || true
+    echo "$BB_OUTPUT" | tee -a "$LOG_FILE"
+    BB_FOUND=$(echo "$BB_OUTPUT" | grep -oE 'Total: [0-9]+ merged PRs' | head -1 | grep -oE '[0-9]+' | head -1 || echo "0")
+fi
 
-FOUND=$(echo "$CLI_OUTPUT" | grep -oE 'Found [0-9]+ PRs' | head -1 | grep -oE '[0-9]+' || echo "0")
+FOUND=$(( GH_FOUND + BB_FOUND ))
 
 ROWS_AFTER=0
 if [[ -f "$CSV_FILE" ]]; then

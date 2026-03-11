@@ -14,7 +14,7 @@ from .csv_handler import CSV_FIELDNAMES
 from .github import GitHubAPIError, fetch_pr_metadata, wait_for_rate_limit
 from .io_safety import normalize_path
 from .team_config import get_team_for_developer
-from .utils import parse_pr_url
+from .utils import detect_pr_provider, parse_pr_url
 
 logger = logging.getLogger("complexity-cli")
 
@@ -44,6 +44,13 @@ def _load_csv_rows(path: Path) -> List[Dict[str, str]]:
             normalized["lines_added"] = str(row.get("lines_added") or "").strip()
             normalized["lines_deleted"] = str(row.get("lines_deleted") or "").strip()
             normalized["explanation"] = str(row.get("explanation") or "").strip()
+            existing_source = str(row.get("source") or "").strip()
+            if existing_source:
+                normalized["source"] = existing_source
+            else:
+                normalized["source"] = (
+                    "bitbucket" if "bitbucket.org" in normalized["pr_url"] else "github"
+                )
             rows.append(normalized)
     return rows
 
@@ -106,9 +113,19 @@ def run_migration(
             continue
 
         try:
+            provider = detect_pr_provider(pr_url)
             owner, repo, pr = parse_pr_url(pr_url)
         except ValueError:
             log(f"Skipping invalid PR URL: {pr_url}")
+            continue
+
+        if provider == "bitbucket":
+            # BB rows get source backfilled but no enrichment via API here
+            if not row.get("team"):
+                developer = row.get("developer") or ""
+                if developer:
+                    row["team"] = get_team_for_developer(developer)
+            enriched += 1
             continue
 
         # Fetch metadata from GitHub
