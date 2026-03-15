@@ -18,10 +18,12 @@ output=$("$REPO_DIR/scripts/sync-new-prs.sh" --days 14 2>&1) || true
 metrics=$(echo "$output" | grep '^METRICS:' | tail -1)
 found=$(echo "$metrics" | sed 's/.*found=\([0-9]*\).*/\1/')
 labeled=$(echo "$metrics" | sed 's/.*labeled=\([0-9]*\).*/\1/')
+skipped=$(echo "$metrics" | sed 's/.*skipped=\([0-9]*\).*/\1/')
 total=$(echo "$metrics" | sed 's/.*total=\([0-9]*\).*/\1/')
 
 if [ -z "$found" ]; then found=0; fi
 if [ -z "$labeled" ]; then labeled=0; fi
+if [ -z "$skipped" ]; then skipped=0; fi
 
 # Auto-commit and push CSV if changed
 if ! /usr/bin/git diff --quiet complexity-report.csv 2>/dev/null; then
@@ -37,7 +39,7 @@ echo "$(date): Done — found=$found labeled=$labeled total=$total git=$push_sta
 
 /opt/homebrew/bin/terminal-notifier \
   -title "PR Complexity Sync" \
-  -subtitle "Found $found PRs, labeled $labeled new" \
+  -subtitle "Found $found PRs, labeled $labeled new, skipped $skipped (already in CSV)" \
   -message "Total in DB: $total PRs | Git: $push_status" \
   -group "complexity-sync" \
   -sound default

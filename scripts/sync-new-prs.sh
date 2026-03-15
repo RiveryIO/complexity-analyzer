@@ -151,5 +151,6 @@ echo "────────────────────────�
 echo "Finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$LOG_FILE"
 echo "New latest merged_at: $NEW_LATEST" | tee -a "$LOG_FILE"
 echo "Total CSV rows: $ROWS_AFTER" | tee -a "$LOG_FILE"
-echo "METRICS: found=$FOUND labeled=$UPDATED total=$ROWS_AFTER" | tee -a "$LOG_FILE"
+SKIPPED=$(( FOUND - UPDATED ))
+echo "METRICS: found=$FOUND labeled=$UPDATED skipped=$SKIPPED total=$ROWS_AFTER" | tee -a "$LOG_FILE"
 echo "Log: $LOG_FILE"
