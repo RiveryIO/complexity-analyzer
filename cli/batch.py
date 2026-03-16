@@ -1033,6 +1033,66 @@ def run_batch_analysis(
     typer.echo(f"\n✓ Batch analysis complete! Results written to: {output_file}", err=True)
 
 
+def _backfill_labeled_pr(
+    pr_url: str,
+    complexity: int,
+    csv_writer: "CSVBatchWriter",
+    github_token: Optional[str],
+    timeout: float,
+    pr_provider: str,
+) -> None:
+    """Backfill a CSV row for a PR that has a label but is missing from the CSV.
+
+    Fetches lightweight metadata (author, dates, line counts) from the API
+    so reports stay accurate without re-running the LLM.
+    """
+    owner, repo, pr = parse_pr_url(pr_url)
+    author = ""
+    merged_at = ""
+    created_at = ""
+    date = ""
+    lines_added = None
+    lines_deleted = None
+
+    try:
+        if pr_provider == "bitbucket":
+            from .bitbucket import fetch_bb_pr_metadata
+            from .config import get_bitbucket_credentials
+
+            bb_email, bb_token = get_bitbucket_credentials()
+            if bb_email and bb_token:
+                meta = fetch_bb_pr_metadata(owner, repo, pr, bb_email, bb_token, timeout)
+                author = meta.get("author", "")
+                merged_at = meta.get("merged_at", "")
+                created_at = meta.get("created_at", "")
+        else:
+            from .github import fetch_pr_metadata
+
+            meta = fetch_pr_metadata(
+                owner, repo, pr, token=github_token, timeout=timeout,
+                check_rate_limit_first=False,
+            )
+            author = (meta.get("user") or {}).get("login", "")
+            merged_at = meta.get("merged_at") or ""
+            created_at = meta.get("created_at") or ""
+            lines_added = meta.get("additions")
+            lines_deleted = meta.get("deletions")
+    except Exception as e:
+        typer.echo(f"  Warning: Could not fetch metadata for backfill of {pr_url}: {e}", err=True)
+
+    date = merged_at[:10] if merged_at else ""
+    team = get_team_for_developer(author)
+
+    csv_writer.add_row(
+        pr_url, complexity, "", author,
+        developer=author, date=date, team=team,
+        merged_at=merged_at, created_at=created_at,
+        lines_added=lines_added, lines_deleted=lines_deleted,
+        source=pr_provider,
+    )
+    typer.echo(f"  Backfilled {pr_url}: complexity={complexity}, author={author}", err=True)
+
+
 def run_batch_analysis_with_labels(
     pr_urls: List[str],
     output_file: Optional[Path],
@@ -1062,13 +1122,22 @@ def run_batch_analysis_with_labels(
         force: If True, re-analyze PRs even if they already have a complexity label
         limit: Maximum number of PRs to process (applied after filtering)
     """
+    # Load CSV completed set early so we can use it during label checks
+    completed_in_csv: Set[str] = set()
+    if resume and output_file:
+        completed_in_csv = load_completed_prs(output_file)
+        if completed_in_csv:
+            typer.echo(f"Found {len(completed_in_csv)} PRs in CSV, will skip them", err=True)
+
     # When labeling (and not forcing), filter out PRs that already have complexity labels
     if label_prs and force:
         typer.echo("Force mode: will re-analyze and overwrite existing labels", err=True)
     elif label_prs:
         typer.echo(f"Checking {len(pr_urls)} PRs for existing complexity labels...", err=True)
+        csv_writer_for_backfill = CSVBatchWriter(output_file) if output_file else None
         unlabeled_urls = []
         already_labeled = 0
+        backfilled = 0
 
         for idx, pr_url in enumerate(pr_urls, 1):
             if idx % 50 == 0 or idx == len(pr_urls):
@@ -1090,6 +1159,13 @@ def run_batch_analysis_with_labels(
                             owner, repo, pr, bb_email, bb_token, timeout
                         )
                         if existing_score is not None:
+                            if pr_url not in completed_in_csv and csv_writer_for_backfill:
+                                _backfill_labeled_pr(
+                                    pr_url, existing_score, csv_writer_for_backfill,
+                                    github_token, timeout, pr_provider,
+                                )
+                                completed_in_csv.add(pr_url)
+                                backfilled += 1
                             already_labeled += 1
                         else:
                             unlabeled_urls.append(pr_url)
@@ -1100,6 +1176,17 @@ def run_batch_analysis_with_labels(
                         owner, repo, pr, github_token, label_prefix, timeout
                     )
                     if existing_label:
+                        if pr_url not in completed_in_csv and csv_writer_for_backfill:
+                            try:
+                                score = int(existing_label[len(label_prefix):].strip())
+                            except (ValueError, IndexError):
+                                score = 0
+                            _backfill_labeled_pr(
+                                pr_url, score, csv_writer_for_backfill,
+                                github_token, timeout, pr_provider,
+                            )
+                            completed_in_csv.add(pr_url)
+                            backfilled += 1
                         already_labeled += 1
                     else:
                         unlabeled_urls.append(pr_url)
@@ -1107,21 +1194,22 @@ def run_batch_analysis_with_labels(
                 typer.echo(f"  Warning: Could not check labels for {pr_url}: {e}", err=True)
                 unlabeled_urls.append(pr_url)
 
-            # Small delay to avoid rate limiting when checking labels
             time.sleep(0.1)
 
+        # Flush backfill rows to disk before main processing
+        if csv_writer_for_backfill:
+            csv_writer_for_backfill.close()
+
+        if backfilled:
+            typer.echo(
+                f"Backfilled {backfilled} PRs that had labels but were missing from CSV",
+                err=True,
+            )
         typer.echo(
             f"Found {already_labeled} PRs already labeled, {len(unlabeled_urls)} to process",
             err=True,
         )
         pr_urls = unlabeled_urls
-
-    # Also check CSV for resume (if output_file is provided)
-    completed_in_csv: Set[str] = set()
-    if resume and output_file:
-        completed_in_csv = load_completed_prs(output_file)
-        if completed_in_csv:
-            typer.echo(f"Found {len(completed_in_csv)} PRs in CSV, will skip them", err=True)
 
     # Filter out PRs already in CSV
     remaining = [url for url in pr_urls if url not in completed_in_csv]
