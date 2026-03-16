@@ -150,6 +150,20 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     .chart-card:hover {{ box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
     .chart-card h3 {{ font-family: 'Syne', sans-serif; font-size: 0.95rem; font-weight: 600; margin: 0 0 0.25rem; }}
     .chart-card .sub {{ font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem; }}
+    .chart-card .sub .hero-stat {{
+      display: inline-flex; align-items: baseline; gap: 0.3rem;
+      margin-left: 0.6rem; padding: 0.15rem 0.6rem 0.15rem 0.5rem;
+      background: linear-gradient(135deg, var(--accent-dim), rgba(180,83,9,0.06));
+      border: 1px solid rgba(180,83,9,0.18);
+      border-radius: 6px; font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: -0.02em; line-height: 1;
+    }}
+    .chart-card .sub .hero-stat .hero-val {{
+      font-size: 1.05rem; font-weight: 600; color: var(--accent);
+    }}
+    .chart-card .sub .hero-stat .hero-unit {{
+      font-size: 0.7rem; font-weight: 500; color: var(--accent); opacity: 0.72;
+    }}
     .chart-container {{ width: 100%; height: 320px; }}
 
     /* Developer picker for multiLine charts */
@@ -670,13 +684,23 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     }}
 
     function renderLine(container, c) {{
+      const seriesItem = {{ type: 'line', data: c.y, smooth: true, symbol: 'circle', symbolSize: 6, itemStyle: {{ color: COLORS[0] }} }};
+      if (c.overall_avg != null) {{
+        seriesItem.markLine = {{
+          silent: true,
+          symbol: 'none',
+          lineStyle: {{ type: 'dashed', color: '#b45309', width: 1.5, opacity: 0.6 }},
+          label: {{ formatter: c.overall_avg + 'h avg', fontSize: 11, color: '#b45309', fontFamily: 'IBM Plex Mono, monospace' }},
+          data: [{{ yAxis: c.overall_avg }}],
+        }};
+      }}
       const opt = {{
         ...CHART_THEME,
         tooltip: {{ trigger: 'axis' }},
         grid: {{ left: 50, right: 30, top: 40, bottom: 60 }},
         xAxis: {{ type: 'category', data: c.x, axisLabel: {{ rotate: 45 }} }},
         yAxis: {{ type: 'value', minInterval: 0 }},
-        series: [{{ type: 'line', data: c.y, smooth: true, symbol: 'circle', symbolSize: 6, itemStyle: {{ color: COLORS[0] }} }}],
+        series: [seriesItem],
       }};
       const chart = echarts.init(container);
       chart.setOption(opt);
@@ -1101,7 +1125,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           : '';
         const spanStyle = hasPicker ? ' style="grid-column:1/-1"' : '';
         const drillHint = isDrill ? '<div class="drill-hint">\u25B6 Click chart to view features</div>' : '';
-        html += `<div class="${{cardClass}}" data-chart-idx="${{idx}}" data-chart-tab="${{key}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}</div><div id="${{id}}" class="chart-container"></div>${{drillHint}}${{pickerHtml}}</div>`;
+        const heroStat = c.overall_avg != null
+          ? `<span class="hero-stat"><span class="hero-val">${{c.overall_avg}}</span><span class="hero-unit">hrs avg</span></span>`
+          : '';
+        html += `<div class="${{cardClass}}" data-chart-idx="${{idx}}" data-chart-tab="${{key}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}${{heroStat}}</div><div id="${{id}}" class="chart-container"></div>${{drillHint}}${{pickerHtml}}</div>`;
       }});
       html += '</div>';
       panel.innerHTML = html;
@@ -1185,7 +1212,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         const pickerHtml = hasPicker ? `<div class="picker-panel" id="${{id}}-picker"></div>` : '';
         const spanStyle = hasPicker ? ' style="grid-column:1/-1"' : '';
         const tabBadge = `<span style="font-size:0.65rem;font-weight:500;color:var(--accent);background:var(--accent-dim);padding:0.15rem 0.45rem;border-radius:4px;margin-left:0.5rem;vertical-align:middle;text-transform:uppercase;letter-spacing:0.04em;">${{tabLabels[m.tab]}}</span>`;
-        html += `<div class="${{cardClass}}"><h3${{spanStyle}}>${{m.data.title}}${{tabBadge}}</h3><div class="sub"${{spanStyle}}>${{m.data.subtitle || ''}}</div><div id="${{id}}" class="chart-container"></div>${{pickerHtml}}</div>`;
+        const searchHeroStat = m.data.overall_avg != null
+          ? `<span class="hero-stat"><span class="hero-val">${{m.data.overall_avg}}</span><span class="hero-unit">hrs avg</span></span>`
+          : '';
+        html += `<div class="${{cardClass}}"><h3${{spanStyle}}>${{m.data.title}}${{tabBadge}}</h3><div class="sub"${{spanStyle}}>${{m.data.subtitle || ''}}${{searchHeroStat}}</div><div id="${{id}}" class="chart-container"></div>${{pickerHtml}}</div>`;
       }});
       html += '</div>';
       searchResultsEl.innerHTML = html;

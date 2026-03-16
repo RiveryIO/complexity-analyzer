@@ -105,11 +105,13 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
             weekly_cycle = cdf.groupby("week")["cycle_hours"].mean()
             if not weekly_cycle.empty:
                 labels = [d.strftime("%Y-%m-%d") for d in weekly_cycle.index]
+                overall_avg = round(float(weekly_cycle.mean()), 1)
                 charts.append({
                     "id": "19",
                     "type": "line",
                     "title": "Average Merge Cycle Time (by Week)",
                     "subtitle": "created_at → merged_at in hours",
+                    "overall_avg": overall_avg,
                     "x": labels,
                     "y": weekly_cycle.tolist(),
                 })
