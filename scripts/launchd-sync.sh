@@ -27,17 +27,34 @@ if [ -z "$found" ]; then found=0; fi
 if [ -z "$labeled" ]; then labeled=0; fi
 if [ -z "$skipped" ]; then skipped=0; fi
 
-# Auto-commit and push CSV if changed
+# Sync Jira features
+echo "$(date): Syncing Jira features..." >> "$LOG_FILE"
+jira_output=$(python3 "$REPO_DIR/scripts/sync-jira-features.py" --days 14 2>&1) || true
+jira_new=$(echo "$jira_output" | grep -o '[0-9]* new' | grep -o '[0-9]*' | tail -1)
+jira_updated=$(echo "$jira_output" | grep -o '[0-9]* updated' | grep -o '[0-9]*' | tail -1)
+if [ -z "$jira_new" ]; then jira_new=0; fi
+if [ -z "$jira_updated" ]; then jira_updated=0; fi
+echo "$(date): Jira sync — new=$jira_new updated=$jira_updated" >> "$LOG_FILE"
+
+# Auto-commit and push CSVs if changed
+changed_files=""
 if ! /usr/bin/git diff --quiet complexity-report.csv 2>/dev/null; then
-  /usr/bin/git add complexity-report.csv
-  /usr/bin/git commit -m "chore: daily sync — $labeled new PRs labeled (total: $total)"
+  changed_files="$changed_files complexity-report.csv"
+fi
+if ! /usr/bin/git diff --quiet features-released.csv 2>/dev/null; then
+  changed_files="$changed_files features-released.csv"
+fi
+
+if [ -n "$changed_files" ]; then
+  /usr/bin/git add $changed_files
+  /usr/bin/git commit -m "chore: daily sync — $labeled new PRs labeled, $jira_new jira features added (total PRs: $total)"
   /usr/bin/git push origin main
   push_status="pushed"
 else
   push_status="no changes"
 fi
 
-echo "$(date): Done — found=$found labeled=$labeled total=$total git=$push_status" >> "$LOG_FILE"
+echo "$(date): Done — found=$found labeled=$labeled total=$total jira_new=$jira_new git=$push_status" >> "$LOG_FILE"
 
 /opt/homebrew/bin/terminal-notifier \
   -title "PR Complexity Sync" \
