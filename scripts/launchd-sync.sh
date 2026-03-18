@@ -6,6 +6,8 @@ set -euo pipefail
 
 export PATH="/Library/Frameworks/Python.framework/Versions/3.12/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export TIKTOKEN_CACHE_DIR="/Users/ohadperry/.cache/tiktoken-persistent"
+export SSL_CERT_FILE="/Users/ohadperry/.ssl/combined_certs.pem"
+export REQUESTS_CA_BUNDLE="/Users/ohadperry/.ssl/combined_certs.pem"
 
 REPO_DIR="/Users/ohadperry/Documents/Dev/complexity-analyzer"
 LOG_FILE="$REPO_DIR/logs/launchd-sync.log"
