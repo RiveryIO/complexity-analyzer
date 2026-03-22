@@ -1069,7 +1069,11 @@ def _backfill_labeled_pr(
             from .github import fetch_pr_metadata
 
             meta = fetch_pr_metadata(
-                owner, repo, pr, token=github_token, timeout=timeout,
+                owner,
+                repo,
+                pr,
+                token=github_token,
+                timeout=timeout,
                 check_rate_limit_first=False,
             )
             author = (meta.get("user") or {}).get("login", "")
@@ -1084,10 +1088,17 @@ def _backfill_labeled_pr(
     team = get_team_for_developer(author)
 
     csv_writer.add_row(
-        pr_url, complexity, "", author,
-        developer=author, date=date, team=team,
-        merged_at=merged_at, created_at=created_at,
-        lines_added=lines_added, lines_deleted=lines_deleted,
+        pr_url,
+        complexity,
+        "",
+        author,
+        developer=author,
+        date=date,
+        team=team,
+        merged_at=merged_at,
+        created_at=created_at,
+        lines_added=lines_added,
+        lines_deleted=lines_deleted,
         source=pr_provider,
     )
     typer.echo(f"  Backfilled {pr_url}: complexity={complexity}, author={author}", err=True)
@@ -1161,8 +1172,12 @@ def run_batch_analysis_with_labels(
                         if existing_score is not None:
                             if pr_url not in completed_in_csv and csv_writer_for_backfill:
                                 _backfill_labeled_pr(
-                                    pr_url, existing_score, csv_writer_for_backfill,
-                                    github_token, timeout, pr_provider,
+                                    pr_url,
+                                    existing_score,
+                                    csv_writer_for_backfill,
+                                    github_token,
+                                    timeout,
+                                    pr_provider,
                                 )
                                 completed_in_csv.add(pr_url)
                                 backfilled += 1
@@ -1178,12 +1193,16 @@ def run_batch_analysis_with_labels(
                     if existing_label:
                         if pr_url not in completed_in_csv and csv_writer_for_backfill:
                             try:
-                                score = int(existing_label[len(label_prefix):].strip())
+                                score = int(existing_label[len(label_prefix) :].strip())
                             except (ValueError, IndexError):
                                 score = 0
                             _backfill_labeled_pr(
-                                pr_url, score, csv_writer_for_backfill,
-                                github_token, timeout, pr_provider,
+                                pr_url,
+                                score,
+                                csv_writer_for_backfill,
+                                github_token,
+                                timeout,
+                                pr_provider,
                             )
                             completed_in_csv.add(pr_url)
                             backfilled += 1
