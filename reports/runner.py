@@ -71,6 +71,7 @@ def run_reports(
         from reports.basic import report_avg_complexity_rolling
         from reports.basic import report_avg_merge_cycle_time
         from reports.basic import report_high_complexity_frequency
+        from reports.basic import report_velocity_per_capita
         from reports.team import report_complexity_distribution_by_team
         from reports.team import report_developer_contribution
         from reports.team import report_complexity_per_dev_vs_pr_count
@@ -93,6 +94,7 @@ def run_reports(
             (report_avg_complexity_rolling, "basic"),
             (report_avg_merge_cycle_time, "basic"),
             (report_high_complexity_frequency, "basic"),
+            (report_velocity_per_capita, "basic"),
             (report_complexity_distribution_by_team, "team"),
             (report_developer_contribution, "team"),
             (report_complexity_per_dev_vs_pr_count, "team"),

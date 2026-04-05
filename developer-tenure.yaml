@@ -1,0 +1,108 @@
+# Developer employment/tenure dates.
+# start: first day the developer was active (required)
+# end:   last day (omit or leave null if still active)
+# leaves: optional list of absence ranges (maternity, sabbatical, etc.)
+#         each entry has "from" and "to" dates (inclusive)
+#
+# Example with leave:
+#   alice:
+#     start: "2023-01-15"
+#     leaves:
+#       - { from: "2025-06-01", to: "2025-09-30" }   # maternity
+#
+# Used by the "Velocity Per Capita" chart to compute active headcount
+# per week. Team membership comes from github-teams.cfg.
+
+developers:
+  # ── Core ──
+  OhadPerryBoomi:
+    start: "2025-05-01"
+  nvgoldin:
+    start: "2024-01-01"
+  orhss:
+    start: "2024-01-01"
+  OmerBor:
+    start: "2024-01-01"
+  hadasdd:
+    start: "2024-01-01"
+  noamtzu:
+    start: "2024-01-01"
+    end: "2025-12-01"
+  OronW:
+    start: "2024-01-01"
+    end: "2026-01-01"
+
+  # ── FullStack ──
+  shiran1989:
+    start: "2024-01-01"
+  Morzus90:
+    start: "2024-01-01"
+  Inara-Rivery:
+    start: "2024-01-01"
+  yairabramovitch:
+    start: "2024-01-01"
+    leaves:
+      - { from: "2026-02-01", to: "2026-03-01" }
+  # FeiginNastia:
+    # start: "2024-01-01"
+  noam-salomon:
+    start: "2024-01-01"
+
+  # ── Integration ──
+  RonKlar90:
+    start: "2024-01-01"
+  OmerMordechai1:
+    start: "2024-01-01"
+  Lizkhrapov:
+    start: "2024-01-01"
+  Amichai-B:
+    start: "2024-01-01"
+
+  # ── CDC ──
+  aaronabv:
+    start: "2024-01-01"
+  sigalikanevsky:
+    start: "2024-01-01"
+  eitamring:
+    start: "2024-01-01"
+  Omri-Groen:
+    start: "2024-01-01"
+  shristiguptaa:
+    start: "2024-01-01"
+
+  # ── Ninja ──
+  pocha-vijaymohanreddy:
+    start: "2024-01-01"
+  mayanks-Boomi:
+    start: "2024-01-01"
+  Srivasu-Boomi:
+    start: "2024-01-01"
+  vijay-prakash-singh-dev:
+    start: "2024-01-01"
+  bharat-boomi:
+    start: "2024-01-01"
+  vs1328:
+    start: "2024-01-01"
+
+  # ── Devops ──
+  alonalmog82:
+    start: "2024-01-01"
+  EdenReuveniRivery:
+    start: "2024-01-01"
+    leaves:
+      - { from: "2025-12-01", to: "2026-05-01" }
+  Alonreznik:
+    start: "2024-01-01"
+  devops-rivery:
+    start: "2024-01-01"
+  # Mikeygoldman1:
+    # start: "2024-01-01"
+  RavikiranDK:
+    start: "2024-01-01"
+  Chen-Poli:
+    start: "2024-01-01"
+    end: "2025-09-01"
+  livninoam:
+    start: "2024-01-01"
+    end: "2025-07-01"
+

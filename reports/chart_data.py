@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 import numpy as np
 import pandas as pd
 
-from cli.team_config import load_team_mapping
+from cli.team_config import get_weekly_headcounts, load_team_mapping
 
 
 def _ensure_date(df: pd.DataFrame) -> pd.DataFrame:
@@ -132,6 +132,53 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "subtitle": "Share of risky PRs per team",
                 "x": pct.index.tolist(),
                 "y": pct.tolist(),
+            })
+
+    # 22: Velocity per capita (multiLine) – total complexity / active headcount
+    non_bot_df = df[~df["team"].isin(["Bots", "Unknown", ""])]
+    weekly_vel = non_bot_df.groupby("week")["complexity"].sum() if not non_bot_df.empty else pd.Series(dtype=float)
+    if not weekly_vel.empty:
+        week_dates = sorted(weekly_vel.index)
+        week_as_date = [w.date() if hasattr(w, "date") else w for w in week_dates]
+        teams_in_data = sorted(
+            t for t in non_bot_df["team"].unique() if t and t not in ("Unknown", "Bots", "")
+        )
+        headcounts = get_weekly_headcounts(week_as_date, teams=teams_in_data or None)
+
+        week_labels = [w.strftime("%Y-%m-%d") for w in week_dates]
+        series_22: list = []
+
+        hc_all = headcounts.get("All Teams", [])
+        if hc_all:
+            per_capita_all = [
+                round(float(weekly_vel.get(w, 0)) / max(h, 1), 2)
+                for w, h in zip(week_dates, hc_all)
+            ]
+            series_22.append({"name": "All Teams", "data": per_capita_all})
+
+        for team_name in teams_in_data:
+            team_weekly = (
+                non_bot_df[non_bot_df["team"] == team_name]
+                .groupby("week")["complexity"]
+                .sum()
+            )
+            hc_team = headcounts.get(team_name, [])
+            if not hc_team:
+                continue
+            per_capita_team = [
+                round(float(team_weekly.get(w, 0)) / max(h, 1), 2)
+                for w, h in zip(week_dates, hc_team)
+            ]
+            series_22.append({"name": team_name, "data": per_capita_team})
+
+        if series_22:
+            charts.append({
+                "id": "22",
+                "type": "multiLine",
+                "title": "Velocity Per Capita (by Week)",
+                "subtitle": "Total complexity / active developers",
+                "x": week_labels,
+                "series": series_22,
             })
 
     return charts

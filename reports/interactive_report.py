@@ -1042,20 +1042,12 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     const TODO_ITEMS = [
       {{
-        title: 'Bitbucket Scan \u2014 Relevant Repos & Projects',
-        desc: 'Automatically discover and index all relevant Bitbucket repositories and projects, linking PR complexity data to the correct teams and service boundaries.'
-      }},
-      {{
         title: 'Deployment Success Rate',
         desc: 'Track the percentage of deployments that succeed without rollbacks or hotfixes. Surface trends per service and team to identify reliability gaps.'
       }},
       {{
         title: 'Support Tickets \u2014 Defect Escape Rate',
         desc: 'Correlate inbound support tickets and production defects with the PRs that introduced them, measuring how often changes escape QA and reach users.'
-      }},
-      {{
-        title: 'User-Facing Features Released',
-        desc: 'Count and categorise merged PRs that deliver net-new user-visible functionality, giving leadership a direct signal on product output velocity.'
       }}
     ];
 
