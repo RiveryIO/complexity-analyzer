@@ -207,53 +207,40 @@ def report_high_complexity_frequency(df: pd.DataFrame, output_dir: Path) -> Opti
 
 
 def report_velocity_per_capita(df: pd.DataFrame, output_dir: Path) -> Optional[str]:
-    """Report 22: Velocity Per Capita – weekly complexity / active headcount."""
+    """Report 22: Velocity Per Capita (org-wide) – weekly complexity / active headcount."""
     df = _ensure_date(df)
     if df.empty:
         return None
     df = df.copy()
-    df["week"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
-    weekly_vel = df.groupby("week")["complexity"].sum().sort_index()
+    df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
+    non_bot = df[~df["team"].isin(["Bots", "Unknown", ""])]
+    if non_bot.empty:
+        return None
+    non_bot = non_bot.copy()
+    non_bot["week"] = pd.to_datetime(non_bot["date"]).dt.to_period("W").dt.start_time
+    weekly_vel = non_bot.groupby("week")["complexity"].sum().sort_index()
     if not has_plottable_series(weekly_vel, min_points=2):
         return None
 
     week_dates = [w.date() for w in weekly_vel.index]
-    df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
-    teams = sorted(t for t in df["team"].unique() if t and t != "Unknown")
-    headcounts = get_weekly_headcounts(week_dates, teams=teams or None)
-
-    fig, ax = plt.subplots(figsize=(14, 6))
-
+    headcounts = get_weekly_headcounts(week_dates)
     hc_all = headcounts.get("All Teams", [])
-    if hc_all:
-        per_capita = [
-            float(weekly_vel.iloc[i]) / max(h, 1) for i, h in enumerate(hc_all)
-        ]
-        ax.plot(weekly_vel.index, per_capita, "k-o", markersize=4, linewidth=2, label="All Teams")
+    if not hc_all:
+        return None
 
-    for team_name in teams:
-        team_weekly = (
-            df[df["team"] == team_name]
-            .groupby("week")["complexity"]
-            .sum()
-            .reindex(weekly_vel.index, fill_value=0)
-        )
-        hc_team = headcounts.get(team_name, [])
-        if not hc_team:
-            continue
-        per_capita_team = [
-            float(team_weekly.iloc[i]) / max(h, 1) for i, h in enumerate(hc_team)
-        ]
-        ax.plot(weekly_vel.index, per_capita_team, "-o", markersize=3, label=team_name)
+    per_capita = [
+        float(weekly_vel.iloc[i]) / max(h, 1) for i, h in enumerate(hc_all)
+    ]
 
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(weekly_vel.index, per_capita, "b-o", markersize=4, linewidth=1.5)
     ax.set_title(
-        "Velocity Per Capita (by Week)\n"
-        "What: Complexity output per active developer. When: Normalize for headcount changes. "
+        "Velocity Per Capita (by Week) — Org-wide\n"
+        "What: Complexity output per active developer. "
         "How: Total complexity / active developers each week."
     )
     ax.set_ylabel("Complexity / Developer")
     ax.set_xlabel("Week")
-    ax.legend(loc="upper left", fontsize=8, ncol=2)
     ax.tick_params(axis="x", rotation=45)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
     ax.set_ylim(bottom=0)

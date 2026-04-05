@@ -1,12 +1,117 @@
 """Interactive HTML report - tabbed dashboard with dynamic ECharts (no PNGs)."""
 
 import json
+import subprocess
+from collections import OrderedDict
 from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
 
+from cli.team_config import load_developer_tenure, load_team_mapping
 from reports.chart_data import build_all_chart_data
+
+_SKIP_PREFIXES = ("chore: daily sync", "Merge pull request")
+_SKIP_MESSAGES = {"wip", "push", "key", "teams", "png ingore", "master report"}
+
+_TYPE_LABELS = {
+    "feat": "Feature",
+    "fix": "Fix",
+    "refactor": "Refactor",
+    "chore": "Chore",
+    "style": "Style",
+    "docs": "Docs",
+    "test": "Test",
+    "perf": "Perf",
+    "ci": "CI",
+}
+
+
+def _build_changelog_data(cwd: Optional[Path] = None) -> list:
+    """Build changelog from git history, grouped by week (newest first)."""
+    repo = cwd or Path.cwd()
+    try:
+        raw = subprocess.check_output(
+            ["git", "log", "--format=%as|%an|%s", "--since=3 months ago"],
+            cwd=repo,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+
+    if not raw:
+        return []
+
+    entries = []
+    for line in raw.splitlines():
+        parts = line.split("|", 2)
+        if len(parts) != 3:
+            continue
+        date_str, author, message = parts
+        msg_lower = message.strip().lower()
+        if msg_lower in _SKIP_MESSAGES:
+            continue
+        if any(message.startswith(p) for p in _SKIP_PREFIXES):
+            continue
+        commit_type = "other"
+        display_msg = message
+        for prefix, label in _TYPE_LABELS.items():
+            if msg_lower.startswith(prefix + ":") or msg_lower.startswith(prefix + "("):
+                commit_type = prefix
+                colon_idx = message.find(":")
+                if colon_idx != -1:
+                    display_msg = message[colon_idx + 1:].strip()
+                break
+
+        entries.append({
+            "date": date_str,
+            "author": author,
+            "message": display_msg,
+            "type": commit_type,
+            "typeLabel": _TYPE_LABELS.get(commit_type, "Other"),
+        })
+
+    weeks: OrderedDict = OrderedDict()
+    for e in entries:
+        from datetime import date as _date, timedelta
+        d = _date.fromisoformat(e["date"])
+        week_start = d - timedelta(days=d.weekday())
+        week_key = week_start.isoformat()
+        weeks.setdefault(week_key, []).append(e)
+
+    result = []
+    for week_key, items in weeks.items():
+        result.append({"week": week_key, "entries": items})
+    return result
+
+
+def _build_engineers_data() -> list:
+    """Merge team mapping + tenure into a list of dicts for the Engineers tab."""
+    team_mapping = load_team_mapping()
+    tenure = load_developer_tenure()
+    devs_by_team: dict = {}
+    for dev, team in team_mapping.items():
+        if team == "Bots":
+            continue
+        info = tenure.get(dev, {})
+        entry = {
+            "username": dev,
+            "team": team,
+            "start": str(info["start"]) if info.get("start") else None,
+            "end": str(info["end"]) if info.get("end") else None,
+            "leaves": [
+                {"from": str(lv["from"]), "to": str(lv["to"])}
+                for lv in info.get("leaves", [])
+            ],
+            "active": info.get("end") is None if info.get("start") else None,
+        }
+        devs_by_team.setdefault(team, []).append(entry)
+    result = []
+    for team in sorted(devs_by_team):
+        members = sorted(devs_by_team[team], key=lambda d: d["username"].lower())
+        result.append({"team": team, "members": members})
+    return result
 
 
 def build_interactive_report(
@@ -18,9 +123,15 @@ def build_interactive_report(
     output_dir = Path(output_dir)
     chart_data = build_all_chart_data(df)
     data_json = json.dumps(chart_data, default=str)
+    engineers_json = json.dumps(_build_engineers_data(), default=str)
+    changelog_json = json.dumps(_build_changelog_data(), default=str)
 
     out = output_dir / "index.html"
-    html = _HTML_TEMPLATE.format(chart_data_json=data_json)
+    html = _HTML_TEMPLATE.format(
+        chart_data_json=data_json,
+        engineers_json=engineers_json,
+        changelog_json=changelog_json,
+    )
     out.write_text(html, encoding="utf-8")
     return str(out)
 
@@ -140,6 +251,19 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     .panel {{ display: none; animation: fadeIn 0.25s ease; }}
     .panel.active {{ display: block; }}
     @keyframes fadeIn {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
+    .subtabs {{
+      display: flex; gap: 0.15rem; margin-bottom: 1.5rem; padding: 0.25rem;
+      background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border); overflow-x: auto;
+    }}
+    .subtab {{
+      padding: 0.45rem 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; font-weight: 500;
+      background: transparent; color: var(--text-muted); border: none; border-radius: 6px;
+      cursor: pointer; transition: color 0.15s, background 0.15s; white-space: nowrap;
+    }}
+    .subtab:hover {{ color: var(--text); background: var(--bg-card); }}
+    .subtab.active {{ color: var(--accent); background: var(--accent-dim); }}
+    .subpanel {{ display: none; animation: fadeIn 0.2s ease; }}
+    .subpanel.active {{ display: block; }}
     .grid {{
       display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); gap: 1.5rem;
     }}
@@ -349,6 +473,179 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       color: var(--text-muted);
       border: 1px solid var(--border);
     }}
+
+    /* Engineers tab */
+    .eng-panel {{ max-width: 960px; margin: 0 auto; padding: 0 0 3rem; }}
+    .eng-header {{ margin-bottom: 1.5rem; }}
+    .eng-header h2 {{
+      font-family: 'Syne', sans-serif; font-size: 1.25rem;
+      font-weight: 700; color: var(--text); margin: 0 0 0.3rem;
+    }}
+    .eng-header p {{ font-size: 0.85rem; color: var(--text-muted); margin: 0; }}
+    .eng-stats {{
+      display: flex; gap: 0.75rem; margin-bottom: 1.75rem; flex-wrap: wrap;
+    }}
+    .eng-stat {{
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.7rem 1.1rem; min-width: 100px; text-align: center;
+    }}
+    .eng-stat-val {{
+      font-family: 'IBM Plex Mono', monospace; font-size: 1.4rem;
+      font-weight: 600; color: var(--accent); line-height: 1;
+    }}
+    .eng-stat-lbl {{
+      font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }}
+    .eng-team {{
+      margin-bottom: 1.25rem; background: var(--bg-card);
+      border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    }}
+    .eng-team-hdr {{
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.75rem 1rem; background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border); cursor: pointer;
+      user-select: none; transition: background 0.15s;
+    }}
+    .eng-team-hdr:hover {{ background: var(--accent-dim); }}
+    .eng-team-name {{
+      font-family: 'Syne', sans-serif; font-size: 0.95rem;
+      font-weight: 600; color: var(--text);
+    }}
+    .eng-team-count {{
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem;
+      color: var(--accent); background: var(--accent-dim); padding: 0.15rem 0.45rem;
+      border-radius: 4px; font-weight: 500;
+    }}
+    .eng-team-chevron {{
+      margin-left: auto; font-size: 0.7rem; color: var(--text-muted);
+      transition: transform 0.2s;
+    }}
+    .eng-team.open .eng-team-chevron {{ transform: rotate(90deg); }}
+    .eng-team-body {{ display: none; }}
+    .eng-team.open .eng-team-body {{ display: block; }}
+    .eng-tbl {{
+      width: 100%; border-collapse: collapse; font-size: 0.82rem;
+    }}
+    .eng-tbl th {{
+      text-align: left; padding: 0.5rem 1rem; font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.7rem; font-weight: 500; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }}
+    .eng-tbl td {{
+      padding: 0.45rem 1rem; border-bottom: 1px solid var(--bg-elevated);
+      color: var(--text); vertical-align: middle;
+    }}
+    .eng-tbl tr:last-child td {{ border-bottom: none; }}
+    .eng-tbl tr:hover td {{ background: var(--bg-elevated); }}
+    .eng-badge {{
+      display: inline-block; font-size: 0.65rem; font-family: 'IBM Plex Mono', monospace;
+      font-weight: 500; padding: 0.12rem 0.4rem; border-radius: 3px;
+      letter-spacing: 0.03em;
+    }}
+    .eng-badge.active {{ background: #d1fae5; color: #065f46; }}
+    .eng-badge.ended {{ background: #fee2e2; color: #991b1b; }}
+    .eng-badge.on-leave {{ background: #fef3c7; color: #92400e; }}
+    .eng-badge.no-data {{ background: var(--bg-elevated); color: var(--text-muted); }}
+    .eng-leave-tag {{
+      display: inline-block; font-size: 0.62rem; font-family: 'IBM Plex Mono', monospace;
+      padding: 0.1rem 0.35rem; border-radius: 3px; margin-left: 0.3rem;
+      background: #fef3c7; color: #92400e;
+    }}
+    .eng-timeline {{
+      height: 6px; background: var(--bg-elevated); border-radius: 3px;
+      position: relative; min-width: 120px; overflow: visible;
+    }}
+    .eng-timeline-bar {{
+      position: absolute; height: 100%; border-radius: 3px; background: var(--accent);
+      opacity: 0.7; min-width: 2px;
+    }}
+    .eng-timeline-leave {{
+      position: absolute; height: 100%; border-radius: 2px;
+      background: repeating-linear-gradient(45deg, #fbbf24, #fbbf24 2px, #fef3c7 2px, #fef3c7 4px);
+    }}
+
+    /* Changelog tab */
+    .cl-panel {{ max-width: 960px; margin: 0 auto; padding: 0 0 3rem; }}
+    .cl-header {{ margin-bottom: 1.5rem; }}
+    .cl-header h2 {{
+      font-family: 'Syne', sans-serif; font-size: 1.25rem;
+      font-weight: 700; color: var(--text); margin: 0 0 0.3rem;
+    }}
+    .cl-header p {{ font-size: 0.85rem; color: var(--text-muted); margin: 0; }}
+    .cl-stats {{
+      display: flex; gap: 0.75rem; margin-bottom: 1.75rem; flex-wrap: wrap;
+    }}
+    .cl-stat {{
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.7rem 1.1rem; min-width: 90px; text-align: center;
+    }}
+    .cl-stat-val {{
+      font-family: 'IBM Plex Mono', monospace; font-size: 1.4rem;
+      font-weight: 600; color: var(--accent); line-height: 1;
+    }}
+    .cl-stat-lbl {{
+      font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }}
+    .cl-week {{
+      margin-bottom: 1.5rem;
+    }}
+    .cl-week-hdr {{
+      display: flex; align-items: center; gap: 0.6rem;
+      margin-bottom: 0.5rem; padding-bottom: 0.4rem;
+      border-bottom: 2px solid var(--accent-dim);
+    }}
+    .cl-week-label {{
+      font-family: 'Syne', sans-serif; font-size: 0.95rem;
+      font-weight: 700; color: var(--text);
+    }}
+    .cl-week-count {{
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem;
+      color: var(--accent); background: var(--accent-dim); padding: 0.12rem 0.4rem;
+      border-radius: 4px; font-weight: 500;
+    }}
+    .cl-entry {{
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      padding: 0.4rem 0; position: relative;
+    }}
+    .cl-entry + .cl-entry {{ border-top: 1px solid var(--bg-elevated); }}
+    .cl-type-badge {{
+      display: inline-block; font-size: 0.6rem; font-family: 'IBM Plex Mono', monospace;
+      font-weight: 600; padding: 0.12rem 0.4rem; border-radius: 3px;
+      letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap;
+      min-width: 52px; text-align: center; flex-shrink: 0; margin-top: 0.15rem;
+    }}
+    .cl-type-badge.feat {{ background: #dbeafe; color: #1e40af; }}
+    .cl-type-badge.fix {{ background: #fee2e2; color: #991b1b; }}
+    .cl-type-badge.refactor {{ background: #ede9fe; color: #5b21b6; }}
+    .cl-type-badge.chore {{ background: var(--bg-elevated); color: var(--text-muted); }}
+    .cl-type-badge.style {{ background: #fce7f3; color: #9d174d; }}
+    .cl-type-badge.docs {{ background: #d1fae5; color: #065f46; }}
+    .cl-type-badge.test {{ background: #fef3c7; color: #92400e; }}
+    .cl-type-badge.perf {{ background: #ccfbf1; color: #134e4a; }}
+    .cl-type-badge.ci {{ background: #e0e7ff; color: #3730a3; }}
+    .cl-type-badge.other {{ background: var(--bg-elevated); color: var(--text-muted); }}
+    .cl-msg {{
+      font-size: 0.85rem; color: var(--text); flex: 1; line-height: 1.5;
+    }}
+    .cl-meta {{
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem;
+      color: var(--text-muted); white-space: nowrap; flex-shrink: 0;
+      margin-top: 0.2rem;
+    }}
+    .cl-filter-bar {{
+      display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.25rem;
+    }}
+    .cl-filter {{
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem;
+      padding: 0.25rem 0.6rem; border-radius: 4px; border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text-muted); cursor: pointer;
+      transition: all 0.15s;
+    }}
+    .cl-filter:hover {{ border-color: var(--accent); color: var(--accent); }}
+    .cl-filter.active {{ background: var(--accent); color: #fff; border-color: var(--accent); }}
 
     /* Drilldown modal overlay */
     .drilldown-overlay {{
@@ -614,7 +911,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="header-row">
         <div class="header-text">
           <h1>Engineering Velocity</h1>
-          <p class="subtitle">Automatic PR complexity analyzer</p>
+          <p class="subtitle">Rivery Data Integration engineering velocity</p>
         </div>
         <div class="global-search" id="global-search">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -641,8 +938,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
   <script>
     const chartData = {chart_data_json};
-    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced', 'features', 'todo'];
-    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced', features: 'Features', todo: 'Roadmap' }};
+    const engineersData = {engineers_json};
+    const changelogData = {changelog_json};
+    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced', 'features', 'todo', 'engineers', 'changelog'];
+    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced', features: 'Features', todo: 'Roadmap', engineers: 'Engineers', changelog: 'Changelog' }};
 
     const CHART_THEME = {{
       backgroundColor: 'transparent',
@@ -1080,6 +1379,175 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         return;
       }}
 
+      if (key === 'engineers') {{
+        const allMembers = engineersData.flatMap(t => t.members);
+        const totalActive = allMembers.filter(m => m.active === true).length;
+        const totalEnded = allMembers.filter(m => m.end != null).length;
+        const totalOnLeave = allMembers.filter(m => m.leaves && m.leaves.length > 0).length;
+        const totalNoData = allMembers.filter(m => m.start == null).length;
+        const totalTeams = engineersData.length;
+
+        const earliest = allMembers.filter(m => m.start).map(m => m.start).sort()[0] || '2024-01-01';
+        const today = new Date().toISOString().slice(0, 10);
+        const tlStart = new Date(earliest).getTime();
+        const tlEnd = new Date(today).getTime();
+        const tlSpan = Math.max(tlEnd - tlStart, 1);
+        function tlPct(d) {{ return Math.max(0, Math.min(100, ((new Date(d).getTime() - tlStart) / tlSpan) * 100)); }}
+
+        function renderTimeline(m) {{
+          if (!m.start) return '<span style="color:var(--text-muted);font-size:0.75rem;">\u2014</span>';
+          const left = tlPct(m.start);
+          const right = m.end ? tlPct(m.end) : 100;
+          const width = Math.max(right - left, 0.5);
+          let leaves = '';
+          (m.leaves || []).forEach(lv => {{
+            const ll = tlPct(lv.from);
+            const lr = tlPct(lv.to);
+            const lw = Math.max(lr - ll, 0.5);
+            leaves += `<div class="eng-timeline-leave" style="left:${{ll}}%;width:${{lw}}%" title="Leave: ${{lv.from}} \u2192 ${{lv.to}}"></div>`;
+          }});
+          return `<div class="eng-timeline"><div class="eng-timeline-bar" style="left:${{left}}%;width:${{width}}%"></div>${{leaves}}</div>`;
+        }}
+
+        function statusBadge(m) {{
+          if (!m.start) return '<span class="eng-badge no-data">No data</span>';
+          if (m.end) return `<span class="eng-badge ended">Left ${{m.end}}</span>`;
+          const onLeaveNow = (m.leaves || []).some(lv => lv.from <= today && lv.to >= today);
+          if (onLeaveNow) return '<span class="eng-badge on-leave">On leave</span>';
+          return '<span class="eng-badge active">Active</span>';
+        }}
+
+        function leaveTags(m) {{
+          if (!m.leaves || m.leaves.length === 0) return '\u2014';
+          return m.leaves.map(lv => `<span class="eng-leave-tag">${{lv.from}} \u2192 ${{lv.to}}</span>`).join(' ');
+        }}
+
+        let teamCards = '';
+        engineersData.forEach((t, ti) => {{
+          const active = t.members.filter(m => m.active === true).length;
+          const rows = t.members.map(m => `
+            <tr>
+              <td style="font-family:'IBM Plex Mono',monospace;font-weight:500;">${{m.username}}</td>
+              <td>${{statusBadge(m)}}</td>
+              <td style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem;">${{m.start || '\u2014'}}</td>
+              <td style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem;">${{m.end || '\u2014'}}</td>
+              <td>${{leaveTags(m)}}</td>
+              <td style="width:140px;">${{renderTimeline(m)}}</td>
+            </tr>`).join('');
+          teamCards += `
+            <div class="eng-team${{ti < 2 ? ' open' : ''}}" id="eng-team-${{ti}}">
+              <div class="eng-team-hdr" onclick="this.parentElement.classList.toggle('open')">
+                <span class="eng-team-name">${{t.team}}</span>
+                <span class="eng-team-count">${{active}} / ${{t.members.length}}</span>
+                <span class="eng-team-chevron">\u25B6</span>
+              </div>
+              <div class="eng-team-body">
+                <table class="eng-tbl">
+                  <thead><tr>
+                    <th>Username</th><th>Status</th><th>Start</th><th>End</th><th>Leaves</th><th>Timeline</th>
+                  </tr></thead>
+                  <tbody>${{rows}}</tbody>
+                </table>
+              </div>
+            </div>`;
+        }});
+
+        panel.innerHTML = `<div class="eng-panel">
+          <div class="eng-header">
+            <h2>Engineering Team Roster</h2>
+            <p>Developer tenure, status, and leave data used for per-capita velocity calculations.</p>
+          </div>
+          <div class="eng-stats">
+            <div class="eng-stat"><div class="eng-stat-val">${{allMembers.length}}</div><div class="eng-stat-lbl">Total</div></div>
+            <div class="eng-stat"><div class="eng-stat-val">${{totalActive}}</div><div class="eng-stat-lbl">Active</div></div>
+            <div class="eng-stat"><div class="eng-stat-val">${{totalEnded}}</div><div class="eng-stat-lbl">Left</div></div>
+            <div class="eng-stat"><div class="eng-stat-val">${{totalOnLeave}}</div><div class="eng-stat-lbl">Has Leave</div></div>
+            <div class="eng-stat"><div class="eng-stat-val">${{totalTeams}}</div><div class="eng-stat-lbl">Teams</div></div>
+          </div>
+          ${{teamCards}}
+        </div>`;
+        panelsEl.appendChild(panel);
+        return;
+      }}
+
+      if (key === 'changelog') {{
+        const allEntries = changelogData.flatMap(w => w.entries);
+        const totalCommits = allEntries.length;
+        const totalWeeks = changelogData.length;
+        const authors = [...new Set(allEntries.map(e => e.author))];
+        const typeCounts = {{}};
+        allEntries.forEach(e => {{ typeCounts[e.typeLabel] = (typeCounts[e.typeLabel] || 0) + 1; }});
+        const topType = Object.entries(typeCounts).sort((a,b) => b[1] - a[1])[0];
+        const typeKeys = ['all', ...Object.keys(typeCounts).sort()];
+
+        let filterBar = '<div class="cl-filter-bar">';
+        typeKeys.forEach(t => {{
+          const label = t === 'all' ? `All (${{totalCommits}})` : `${{t}} (${{typeCounts[t]}})`;
+          filterBar += `<button class="cl-filter${{t === 'all' ? ' active' : ''}}" data-cl-type="${{t}}">${{label}}</button>`;
+        }});
+        filterBar += '</div>';
+
+        function weekLabel(w) {{
+          const d = new Date(w + 'T00:00:00');
+          const end = new Date(d); end.setDate(end.getDate() + 6);
+          const fmt = (dt) => dt.toLocaleDateString('en-US', {{ month: 'short', day: 'numeric' }});
+          return fmt(d) + ' \u2013 ' + fmt(end);
+        }}
+
+        let weeksHtml = '';
+        changelogData.forEach(w => {{
+          let entriesHtml = '';
+          w.entries.forEach(e => {{
+            entriesHtml += `
+              <div class="cl-entry" data-entry-type="${{e.typeLabel}}">
+                <span class="cl-type-badge ${{e.type}}">${{e.typeLabel}}</span>
+                <span class="cl-msg">${{e.message}}</span>
+                <span class="cl-meta">${{e.author}} &middot; ${{e.date}}</span>
+              </div>`;
+          }});
+          weeksHtml += `
+            <div class="cl-week" data-week="${{w.week}}">
+              <div class="cl-week-hdr">
+                <span class="cl-week-label">${{weekLabel(w.week)}}</span>
+                <span class="cl-week-count">${{w.entries.length}} commits</span>
+              </div>
+              ${{entriesHtml}}
+            </div>`;
+        }});
+
+        panel.innerHTML = `<div class="cl-panel">
+          <div class="cl-header">
+            <h2>Changelog</h2>
+            <p>All meaningful commits since the project fork, grouped by week.</p>
+          </div>
+          <div class="cl-stats">
+            <div class="cl-stat"><div class="cl-stat-val">${{totalCommits}}</div><div class="cl-stat-lbl">Commits</div></div>
+            <div class="cl-stat"><div class="cl-stat-val">${{totalWeeks}}</div><div class="cl-stat-lbl">Weeks</div></div>
+            <div class="cl-stat"><div class="cl-stat-val">${{authors.length}}</div><div class="cl-stat-lbl">Contributors</div></div>
+            <div class="cl-stat"><div class="cl-stat-val">${{topType ? topType[1] : 0}}</div><div class="cl-stat-lbl">${{topType ? topType[0] : ''}}</div></div>
+          </div>
+          ${{filterBar}}
+          ${{weeksHtml}}
+        </div>`;
+        panelsEl.appendChild(panel);
+
+        panel.querySelectorAll('.cl-filter').forEach(btn => {{
+          btn.onclick = () => {{
+            panel.querySelectorAll('.cl-filter').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const filterType = btn.dataset.clType;
+            panel.querySelectorAll('.cl-entry').forEach(entry => {{
+              entry.style.display = (filterType === 'all' || entry.dataset.entryType === filterType) ? '' : 'none';
+            }});
+            panel.querySelectorAll('.cl-week').forEach(week => {{
+              const visible = [...week.querySelectorAll('.cl-entry')].some(e => e.style.display !== 'none');
+              week.style.display = visible ? '' : 'none';
+            }});
+          }};
+        }});
+        return;
+      }}
+
       const charts = chartData[key] || [];
 
       let summaryHtml = '';
@@ -1105,8 +1573,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         </div>`;
       }}
 
-      let html = summaryHtml + '<div class="grid">';
-      charts.forEach((c, idx) => {{
+      function buildCardHtml(c, idx, key) {{
         const id = 'chart-' + key + '-' + idx;
         const hasPicker = c.hasPicker && c.series && c.series.length > 6;
         const isDrill = c.drilldown === true;
@@ -1117,14 +1584,57 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           : '';
         const spanStyle = hasPicker ? ' style="grid-column:1/-1"' : '';
         const drillHint = isDrill ? '<div class="drill-hint">\u25B6 Click chart to view features</div>' : '';
+        const heroUnit = c.overall_avg_unit || 'hrs avg';
         const heroStat = c.overall_avg != null
-          ? `<span class="hero-stat"><span class="hero-val">${{c.overall_avg}}</span><span class="hero-unit">hrs avg</span></span>`
+          ? `<span class="hero-stat"><span class="hero-val">${{c.overall_avg}}</span><span class="hero-unit">${{heroUnit}}</span></span>`
           : '';
-        html += `<div class="${{cardClass}}" data-chart-idx="${{idx}}" data-chart-tab="${{key}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}${{heroStat}}</div><div id="${{id}}" class="chart-container"></div>${{drillHint}}${{pickerHtml}}</div>`;
-      }});
-      html += '</div>';
+        return `<div class="${{cardClass}}" data-chart-idx="${{idx}}" data-chart-tab="${{key}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}${{heroStat}}</div><div id="${{id}}" class="chart-container"></div>${{drillHint}}${{pickerHtml}}</div>`;
+      }}
+
+      const hasSubtabs = charts.some(c => c._subtab);
+
+      let html = summaryHtml;
+      if (hasSubtabs) {{
+        const seen = new Set();
+        const subtabOrder = [];
+        charts.forEach(c => {{
+          const st = c._subtab || 'Other';
+          if (!seen.has(st)) {{ seen.add(st); subtabOrder.push(st); }}
+        }});
+        html += `<div class="subtabs" id="subtabs-${{key}}">`;
+        subtabOrder.forEach((st, si) => {{
+          html += `<button class="subtab${{si === 0 ? ' active' : ''}}" data-subtab="${{st}}" data-parenttab="${{key}}">${{st}}</button>`;
+        }});
+        html += '</div>';
+        subtabOrder.forEach((st, si) => {{
+          html += `<div class="subpanel${{si === 0 ? ' active' : ''}}" data-subtab-panel="${{st}}" data-parenttab="${{key}}"><div class="grid">`;
+          charts.forEach((c, idx) => {{
+            if ((c._subtab || 'Other') === st) html += buildCardHtml(c, idx, key);
+          }});
+          html += '</div></div>';
+        }});
+      }} else {{
+        html += '<div class="grid">';
+        charts.forEach((c, idx) => {{ html += buildCardHtml(c, idx, key); }});
+        html += '</div>';
+      }}
+
       panel.innerHTML = html;
       panelsEl.appendChild(panel);
+
+      if (hasSubtabs) {{
+        panel.querySelectorAll('.subtab').forEach(btn => {{
+          btn.onclick = () => {{
+            const parentKey = btn.dataset.parenttab;
+            panel.querySelectorAll(`.subtab[data-parenttab="${{parentKey}}"]`).forEach(b => b.classList.remove('active'));
+            panel.querySelectorAll(`.subpanel[data-parenttab="${{parentKey}}"]`).forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            const sp = panel.querySelector(`.subpanel[data-subtab-panel="${{btn.dataset.subtab}}"][data-parenttab="${{parentKey}}"]`);
+            if (sp) sp.classList.add('active');
+            (chartInstances[key] || []).forEach(ch => ch.resize());
+          }};
+        }});
+      }}
 
       chartInstances[key] = [];
       charts.forEach((c, idx) => {{

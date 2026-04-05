@@ -33,9 +33,41 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
     if df.empty:
         return charts
 
-    # 01: Complexity volume over time (bar)
     df = df.copy()
     df["week"] = pd.to_datetime(df["date"]).dt.to_period("W")
+    df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
+
+    # 22: Velocity per capita – org-wide total (first chart)
+    non_bot_df = df[~df["team"].isin(["Bots", "Unknown", ""])]
+    df["week_ts"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
+    non_bot_df_ts = non_bot_df.copy()
+    non_bot_df_ts["week_ts"] = pd.to_datetime(non_bot_df_ts["date"]).dt.to_period("W").dt.start_time
+    weekly_vel = non_bot_df_ts.groupby("week_ts")["complexity"].sum() if not non_bot_df_ts.empty else pd.Series(dtype=float)
+    if not weekly_vel.empty:
+        week_dates = sorted(weekly_vel.index)
+        week_as_date = [w.date() if hasattr(w, "date") else w for w in week_dates]
+        headcounts = get_weekly_headcounts(week_as_date)
+        hc_all = headcounts.get("All Teams", [])
+        if hc_all:
+            per_capita = [
+                round(float(weekly_vel.get(w, 0)) / max(h, 1), 2)
+                for w, h in zip(week_dates, hc_all)
+            ]
+            non_zero = [v for v in per_capita if v > 0]
+            avg_pc = round(sum(non_zero) / len(non_zero), 1) if non_zero else 0
+            week_labels = [w.strftime("%Y-%m-%d") for w in week_dates]
+            charts.append({
+                "id": "22",
+                "type": "line",
+                "title": "Velocity Per Capita (by Week)",
+                "subtitle": "Org-wide: total complexity / active developers",
+                "overall_avg": avg_pc,
+                "overall_avg_unit": "avg / week",
+                "x": week_labels,
+                "y": per_capita,
+            })
+
+    # 01: Complexity volume over time (bar)
     weekly = df.groupby("week")["complexity"].sum()
     if not weekly.empty:
         labels = [p.start_time.strftime("%Y-%m-%d") for p in weekly.index]
@@ -62,8 +94,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
         })
 
     # 02: PR count vs complexity (dual line)
-    df["week"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
-    weekly_agg = df.groupby("week").agg(pr_count=("pr_url", "count"), total_complexity=("complexity", "sum"))
+    weekly_agg = df.groupby("week_ts").agg(pr_count=("pr_url", "count"), total_complexity=("complexity", "sum"))
     if not weekly_agg.empty:
         labels = [d.strftime("%Y-%m-%d") for d in weekly_agg.index]
         charts.append({
@@ -79,7 +110,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
         })
 
     # 03: Avg complexity rolling (line)
-    weekly_avg = df.groupby("week")["complexity"].mean()
+    weekly_avg = df.groupby("week_ts")["complexity"].mean()
     rolling = weekly_avg.rolling(4, min_periods=1).mean()
     if not rolling.empty:
         labels = [d.strftime("%Y-%m-%d") for d in rolling.index]
@@ -117,7 +148,6 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 })
 
     # 07: High complexity frequency (bar)
-    df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
     tdf = df[df["team"] != "Unknown"]
     if not tdf.empty:
         high = tdf[tdf["complexity"] >= 6]
@@ -132,53 +162,6 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "subtitle": "Share of risky PRs per team",
                 "x": pct.index.tolist(),
                 "y": pct.tolist(),
-            })
-
-    # 22: Velocity per capita (multiLine) – total complexity / active headcount
-    non_bot_df = df[~df["team"].isin(["Bots", "Unknown", ""])]
-    weekly_vel = non_bot_df.groupby("week")["complexity"].sum() if not non_bot_df.empty else pd.Series(dtype=float)
-    if not weekly_vel.empty:
-        week_dates = sorted(weekly_vel.index)
-        week_as_date = [w.date() if hasattr(w, "date") else w for w in week_dates]
-        teams_in_data = sorted(
-            t for t in non_bot_df["team"].unique() if t and t not in ("Unknown", "Bots", "")
-        )
-        headcounts = get_weekly_headcounts(week_as_date, teams=teams_in_data or None)
-
-        week_labels = [w.strftime("%Y-%m-%d") for w in week_dates]
-        series_22: list = []
-
-        hc_all = headcounts.get("All Teams", [])
-        if hc_all:
-            per_capita_all = [
-                round(float(weekly_vel.get(w, 0)) / max(h, 1), 2)
-                for w, h in zip(week_dates, hc_all)
-            ]
-            series_22.append({"name": "All Teams", "data": per_capita_all})
-
-        for team_name in teams_in_data:
-            team_weekly = (
-                non_bot_df[non_bot_df["team"] == team_name]
-                .groupby("week")["complexity"]
-                .sum()
-            )
-            hc_team = headcounts.get(team_name, [])
-            if not hc_team:
-                continue
-            per_capita_team = [
-                round(float(team_weekly.get(w, 0)) / max(h, 1), 2)
-                for w, h in zip(week_dates, hc_team)
-            ]
-            series_22.append({"name": team_name, "data": per_capita_team})
-
-        if series_22:
-            charts.append({
-                "id": "22",
-                "type": "multiLine",
-                "title": "Velocity Per Capita (by Week)",
-                "subtitle": "Total complexity / active developers",
-                "x": week_labels,
-                "series": series_22,
             })
 
     return charts
@@ -216,6 +199,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "type": "boxplot",
                 "title": "Complexity Distribution by Team",
                 "subtitle": "Boxplot per team",
+                "_subtab": "All",
                 "x": teams,
                 "data": box_data,
             })
@@ -228,6 +212,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "type": "bar",
             "title": "Team Complexity Gini Coefficient",
             "subtitle": "Concentration within each team",
+            "_subtab": "All",
             "x": ginis.index.tolist(),
             "y": ginis.tolist(),
         })
@@ -244,6 +229,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "type": "bar",
             "title": "Velocity per Team per Developer",
             "subtitle": "Complexity output divided by headcount",
+            "_subtab": "All",
             "x": normalized.index.tolist(),
             "y": normalized.tolist(),
         })
@@ -260,6 +246,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "type": "bar",
                 "title": "Average Merge Cycle Time per Team",
                 "subtitle": "Hours from creation to merge",
+                "_subtab": "All",
                 "x": team_avg.index.tolist(),
                 "y": team_avg.tolist(),
             })
@@ -275,12 +262,13 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "type": "scatter",
                 "title": "Complexity vs Cycle Time",
                 "subtitle": "PR complexity vs hours to merge",
+                "_subtab": "All",
                 "data": [[float(r["complexity"]), float(r["cycle_hours"])] for _, r in cdf.iterrows()],
                 "xAxisName": "Complexity",
                 "yAxisName": "Cycle Time (hours)",
             })
 
-    # 05, 06: Per-team (developer contribution, complexity vs pr count)
+    # 05, 06, 22-T: Per-team charts
     df_full = _ensure_date(df.copy())
     dev_col = "developer" if "developer" in df_full.columns else "author"
     df_full["developer"] = df_full.get(dev_col, pd.Series([""] * len(df_full))).fillna("").astype(str)
@@ -289,13 +277,43 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
     if df_full.empty:
         return charts
 
-    for team in df_full["team"].unique():
+    # Pre-compute headcounts for per-team velocity per capita
+    all_teams = sorted(t for t in df_full["team"].unique() if t != "Bots")
+    df_full_weeks = pd.to_datetime(df_full["date"]).dt.to_period("W").dt.start_time
+    all_week_dates = sorted(df_full_weeks.unique())
+    week_as_date = [w.date() if hasattr(w, "date") else w for w in all_week_dates]
+    headcounts = get_weekly_headcounts(week_as_date, teams=all_teams)
+
+    for team in all_teams:
         tdf = df_full[df_full["team"] == team].copy()
-        # 05: Stacked bar
         tdf["week"] = pd.to_datetime(tdf["date"]).dt.to_period("W").dt.start_time
+
+        # 22-T: Velocity per capita (first in each team sub-tab)
+        team_weekly = tdf.groupby("week")["complexity"].sum()
+        hc_team = headcounts.get(team, [])
+        if not team_weekly.empty and hc_team:
+            per_capita = [
+                round(float(team_weekly.get(w, 0)) / max(h, 1), 2)
+                for w, h in zip(all_week_dates, hc_team)
+            ]
+            non_zero = [v for v in per_capita if v > 0]
+            avg_pc = round(sum(non_zero) / len(non_zero), 1) if non_zero else 0
+            week_labels = [w.strftime("%Y-%m-%d") for w in all_week_dates]
+            charts.append({
+                "id": f"22-{team}",
+                "type": "line",
+                "title": f"Velocity Per Capita — {team}",
+                "subtitle": "Complexity / active developers per week",
+                "_subtab": team,
+                "overall_avg": avg_pc,
+                "overall_avg_unit": "avg / week",
+                "x": week_labels,
+                "y": per_capita,
+            })
+
+        # 05: Stacked bar
         pivot = tdf.pivot_table(index="week", columns="developer", values="complexity", aggfunc="sum", fill_value=0)
         pivot = pivot.reindex(pivot.sum().sort_values(ascending=False).index, axis=1)
-        # Drop weeks with no activity so sparse teams don't show empty charts
         pivot = pivot.loc[(pivot != 0).any(axis=1)]
         if not pivot.empty and pivot.sum().sum() > 0:
             weeks = [d.strftime("%Y-%m-%d") for d in pivot.index]
@@ -305,6 +323,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "type": "stackedBar",
                 "title": f"Developer Velocity — {team}",
                 "subtitle": "Complexity per week",
+                "_subtab": team,
                 "x": weeks,
                 "series": series,
             })
@@ -316,6 +335,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "type": "scatterLabel",
                 "title": f"Complexity vs PR Count — {team}",
                 "subtitle": "Per developer",
+                "_subtab": team,
                 "data": [{"name": idx, "value": [row["pr_count"], row["total_complexity"]]} for idx, row in agg.iterrows()],
                 "xAxisName": "PR Count",
                 "yAxisName": "Total Complexity",

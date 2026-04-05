@@ -1,0 +1,25 @@
+---
+description: Regenerate the interactive dashboard after code changes
+globs:
+alwaysApply: true
+---
+
+# Regenerate Reports After Changes
+
+After making any code or configuration changes to this repository, **regenerate the interactive dashboard** so the Changelog tab stays current:
+
+```bash
+cd /Users/ohadperry/Documents/Dev/complexity-analyzer
+python3.12 -c "
+from reports.runner import run_reports
+from pathlib import Path
+run_reports(Path('complexity-report.csv'), Path('output'))
+"
+```
+
+The Changelog tab in the dashboard is built from `git log` at report-generation time. If you skip regeneration, the changelog will be stale.
+
+Key files involved:
+- `reports/interactive_report.py` — `_build_changelog_data()` reads git history
+- `reports/runner.py` — `run_reports()` orchestrates all report generation
+- `output/index.html` — the generated dashboard
