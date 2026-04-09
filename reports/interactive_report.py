@@ -1401,11 +1401,11 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           const medals = ['\U0001F947', '\U0001F948', '\U0001F949'];
           const rowClasses = ['gold-row', 'silver-row', 'bronze-row'];
           if (!rows.length) {{
-            document.getElementById('lb-tbody').innerHTML =
+            panel.querySelector('#lb-tbody').innerHTML =
               '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">No approval data for this period</td></tr>';
             return;
           }}
-          document.getElementById('lb-tbody').innerHTML = rows.map((r, i) => {{
+          panel.querySelector('#lb-tbody').innerHTML = rows.map((r, i) => {{
             const cls = i < 3 ? rowClasses[i] : '';
             const rank = i < 3 ? medals[i] : (i + 1);
             return `<tr class="${{cls}}">

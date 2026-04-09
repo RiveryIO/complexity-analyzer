@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-import httpx
+from cli.github import fetch_first_approver
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 CSV_FILE = PROJECT_DIR / "complexity-report.csv"
@@ -40,27 +40,6 @@ def _parse_github_url(url: str):
     → (owner, repo, pr_number)."""
     parts = url.rstrip("/").split("/")
     return parts[-4], parts[-3], int(parts[-1])
-
-
-def _fetch_first_approver(owner: str, repo: str, pr: int, token: str) -> str:
-    """Return login of first APPROVED reviewer, or '' if none."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr}/reviews"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-    }
-    try:
-        resp = httpx.get(url, headers=headers, timeout=30)
-        if resp.status_code == 404:
-            return ""
-        resp.raise_for_status()
-        reviews = resp.json()
-        approved = [r for r in reviews if r.get("state") == "APPROVED"]
-        approved.sort(key=lambda r: r.get("submitted_at", ""))
-        return approved[0]["user"]["login"] if approved else ""
-    except Exception as e:
-        print(f"  Warning: {e}", file=sys.stderr)
-        return ""
 
 
 def main() -> None:
@@ -121,7 +100,11 @@ def main() -> None:
             continue
 
         print(f"  [{i}/{len(to_backfill)}] {pr_url} ...", end=" ", flush=True)
-        approver = _fetch_first_approver(owner, repo, pr_num, token)
+        try:
+            approver = fetch_first_approver(owner, repo, pr_num, token=token)
+        except Exception as e:
+            print(f"  Warning: {e}", file=sys.stderr)
+            approver = ""
         row["approved_by"] = approver
         filled += 1
         print(approver or "(none)")
