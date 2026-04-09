@@ -2,6 +2,7 @@
 
 import csv
 import logging
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -15,6 +16,7 @@ import typer
 from .constants import DEFAULT_SLEEP_SECONDS, DEFAULT_TIMEOUT
 from .github import (
     GitHubAPIError,
+    fetch_first_approver,
     has_complexity_label,
     list_user_repos,
     search_closed_prs,
@@ -925,6 +927,15 @@ def run_batch_analysis(
         date = merged_at[:10] if merged_at else ""
         lines_added = result.get("lines_added")
         lines_deleted = result.get("lines_deleted")
+        # Fetch first approver for GitHub PRs (non-critical — silent on failure)
+        approved_by = ""
+        if "github.com" in pr_url_result:
+            try:
+                _owner, _repo, _pr = parse_pr_url(pr_url_result)
+                _token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+                approved_by = fetch_first_approver(_owner, _repo, int(_pr), token=_token)
+            except Exception:
+                pass
         csv_writer.add_row(
             pr_url_result,
             complexity,
@@ -937,6 +948,7 @@ def run_batch_analysis(
             created_at=created_at,
             lines_added=lines_added,
             lines_deleted=lines_deleted,
+            approved_by=approved_by,
         )
 
     try:
