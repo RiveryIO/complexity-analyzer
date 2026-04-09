@@ -608,7 +608,68 @@ def _extract_features() -> Dict[str, Any]:
     return {"charts": charts, "rows": rows_for_table}
 
 
-def build_all_chart_data(df: pd.DataFrame) -> Dict[str, List[Dict[str, Any]]]:
+def _extract_leaderboard(df: pd.DataFrame) -> Dict[str, Any]:
+    """Build approver leaderboard for three time windows: 30d, 90d, all-time.
+
+    Returns dict with keys '30d', '90d', 'all'. Each value is a list of dicts:
+    {rank, reviewer, team, approvals, avg_complexity}, sorted by approvals desc.
+    """
+    empty: Dict[str, Any] = {"30d": [], "90d": [], "all": []}
+    if "approved_by" not in df.columns:
+        return empty
+
+    df = _ensure_date(df)
+    if df.empty:
+        return empty
+
+    df = df.copy()
+    df["_date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
+    df = df.dropna(subset=["_date"])
+    df["approved_by"] = df["approved_by"].fillna("").astype(str).str.strip()
+    df["complexity"] = pd.to_numeric(df["complexity"], errors="coerce").fillna(0)
+
+    mapping = load_team_mapping()
+    now = pd.Timestamp.now(tz="UTC")
+
+    cutoffs: Dict[str, Any] = {
+        "30d": now - pd.Timedelta(days=30),
+        "90d": now - pd.Timedelta(days=90),
+        "all": None,
+    }
+
+    result: Dict[str, Any] = {}
+    for period, cutoff in cutoffs.items():
+        sub = df[df["approved_by"] != ""].copy()
+        if cutoff is not None:
+            sub = sub[sub["_date"] >= cutoff]
+
+        if sub.empty:
+            result[period] = []
+            continue
+
+        agg = (
+            sub.groupby("approved_by")
+            .agg(approvals=("pr_url", "count"), avg_complexity=("complexity", "mean"))
+            .sort_values("approvals", ascending=False)
+            .reset_index()
+        )
+
+        rows = []
+        for rank, (_, row) in enumerate(agg.iterrows(), 1):
+            reviewer = row["approved_by"]
+            rows.append({
+                "rank": rank,
+                "reviewer": reviewer,
+                "team": mapping.get(reviewer, ""),
+                "approvals": int(row["approvals"]),
+                "avg_complexity": round(float(row["avg_complexity"]), 1),
+            })
+        result[period] = rows
+
+    return result
+
+
+def build_all_chart_data(df: pd.DataFrame) -> Dict[str, Any]:
     """Build chart data for all tabs. Returns {tab: [chart_data, ...]}."""
     features_data = _extract_features()
     return {
@@ -619,4 +680,5 @@ def build_all_chart_data(df: pd.DataFrame) -> Dict[str, List[Dict[str, Any]]]:
         "advanced": _extract_advanced(df),
         "features": features_data.get("charts", []),
         "_features_rows": features_data.get("rows", []),
+        "leaderboard": _extract_leaderboard(df),
     }

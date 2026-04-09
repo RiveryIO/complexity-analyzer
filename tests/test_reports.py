@@ -3,7 +3,11 @@
 import time
 import pytest
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
 
+import pandas as pd
+
+from reports.chart_data import _extract_leaderboard
 from reports.runner import load_dataframe, run_reports
 from reports.validation import MIN_PNG_SIZE_BYTES
 
@@ -124,3 +128,49 @@ def test_run_reports_no_empty_pngs_left_behind(tmp_path):
         assert (
             p.stat().st_size >= MIN_PNG_SIZE_BYTES
         ), f"Report {path} is too small ({p.stat().st_size} bytes)"
+
+
+def test_extract_leaderboard_groups_by_approver():
+    today = datetime.now(timezone.utc)
+    recent = (today - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    old = (today - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    df = pd.DataFrame([
+        {"pr_url": "https://github.com/o/r/pull/1", "complexity": 3, "approved_by": "alice", "date": recent, "merged_at": recent},
+        {"pr_url": "https://github.com/o/r/pull/2", "complexity": 5, "approved_by": "alice", "date": recent, "merged_at": recent},
+        {"pr_url": "https://github.com/o/r/pull/3", "complexity": 4, "approved_by": "bob",   "date": recent, "merged_at": recent},
+        {"pr_url": "https://github.com/o/r/pull/4", "complexity": 2, "approved_by": "alice", "date": old,    "merged_at": old},
+    ])
+
+    result = _extract_leaderboard(df)
+
+    # 30d: alice=2, bob=1
+    assert result["30d"][0]["reviewer"] == "alice"
+    assert result["30d"][0]["approvals"] == 2
+    assert result["30d"][0]["rank"] == 1
+    assert result["30d"][1]["reviewer"] == "bob"
+    assert result["30d"][1]["approvals"] == 1
+
+    # all-time: alice=3, bob=1
+    assert result["all"][0]["reviewer"] == "alice"
+    assert result["all"][0]["approvals"] == 3
+
+    # avg_complexity for alice in 30d: (3+5)/2 = 4.0
+    assert result["30d"][0]["avg_complexity"] == 4.0
+
+
+def test_extract_leaderboard_no_approved_by_column():
+    df = pd.DataFrame([
+        {"pr_url": "https://github.com/o/r/pull/1", "complexity": 3, "date": "2026-03-10", "merged_at": "2026-03-10T10:00:00Z"},
+    ])
+    result = _extract_leaderboard(df)
+    assert result == {"30d": [], "90d": [], "all": []}
+
+
+def test_extract_leaderboard_empty_approved_by():
+    df = pd.DataFrame([
+        {"pr_url": "https://github.com/o/r/pull/1", "complexity": 3, "approved_by": "", "date": "2026-03-10", "merged_at": "2026-03-10T10:00:00Z"},
+    ])
+    result = _extract_leaderboard(df)
+    assert result["30d"] == []
+    assert result["all"] == []
