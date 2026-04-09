@@ -21,6 +21,7 @@ CSV_FIELDNAMES = [
     "lines_deleted",
     "explanation",
     "source",
+    "approved_by",
 ]
 
 
@@ -90,6 +91,7 @@ class CSVBatchWriter:
         lines_added: Optional[int] = None,
         lines_deleted: Optional[int] = None,
         source: Optional[str] = None,
+        approved_by: Optional[str] = None,
     ) -> None:
         """
         Add a row to the buffer, flush if batch size reached.
@@ -126,6 +128,7 @@ class CSVBatchWriter:
                 "lines_deleted": str(lines_deleted) if lines_deleted is not None else "",
                 "explanation": explanation,
                 "source": source,
+                "approved_by": approved_by or "",
             }
             # Ensure all fieldnames present
             for fn in self._fieldnames:

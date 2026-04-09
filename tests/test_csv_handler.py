@@ -135,3 +135,32 @@ def test_load_completed_prs_from_csv_not_exists(tmp_path):
     """Test loading from non-existent file."""
     completed = load_completed_prs_from_csv(tmp_path / "nonexistent.csv")
     assert len(completed) == 0
+
+
+def test_approved_by_in_fieldnames():
+    assert "approved_by" in CSV_FIELDNAMES
+
+
+def test_add_row_writes_approved_by(tmp_path):
+    output_file = tmp_path / "out.csv"
+    writer = CSVBatchWriter(output_file)
+    writer.add_row(
+        "https://github.com/org/repo/pull/1",
+        5,
+        "explanation",
+        "alice",
+        developer="alice",
+        date="2026-03-10",
+        team="FullStack",
+        merged_at="2026-03-10T10:00:00Z",
+        created_at="2026-03-09T10:00:00Z",
+        lines_added=10,
+        lines_deleted=2,
+        approved_by="bob",
+    )
+    writer.close()
+
+    with output_file.open("r") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        assert rows[0]["approved_by"] == "bob"
