@@ -36,7 +36,8 @@ def _get_token() -> str:
 
 
 def _parse_github_url(url: str):
-    """Parse 'https://github.com/owner/repo/pull/123' → (owner, repo, pr_number)."""
+    """Parse 'https://github.com/owner/repo/pull/123'
+    → (owner, repo, pr_number)."""
     parts = url.rstrip("/").split("/")
     return parts[-4], parts[-3], int(parts[-1])
 
@@ -44,7 +45,10 @@ def _parse_github_url(url: str):
 def _fetch_first_approver(owner: str, repo: str, pr: int, token: str) -> str:
     """Return login of first APPROVED reviewer, or '' if none."""
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr}/reviews"
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
     try:
         resp = httpx.get(url, headers=headers, timeout=30)
         if resp.status_code == 404:
@@ -73,7 +77,8 @@ def main() -> None:
 
     if "approved_by" not in fieldnames:
         print(
-            "Error: 'approved_by' column not found. Deploy the schema change (Task 1) first.",
+            "Error: 'approved_by' column not found. "
+            "Deploy the schema change (Task 1) first.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -88,13 +93,18 @@ def main() -> None:
         if not merged_at:
             continue
         try:
-            merged_dt = datetime.fromisoformat(merged_at.replace("Z", "+00:00"))
+            merged_dt = datetime.fromisoformat(
+                merged_at.replace("Z", "+00:00")
+            )
         except ValueError:
             continue
         if merged_dt >= CUTOFF:
             to_backfill.append(row)
 
-    print(f"Found {len(to_backfill)} GitHub PRs in last 30 days without approved_by")
+    print(
+        f"Found {len(to_backfill)} GitHub PRs in last 30 days"
+        " without approved_by"
+    )
     if not to_backfill:
         print("Nothing to do.")
         return
@@ -105,7 +115,9 @@ def main() -> None:
         try:
             owner, repo, pr_num = _parse_github_url(pr_url)
         except (IndexError, ValueError):
-            print(f"  [{i}/{len(to_backfill)}] Skipping malformed URL: {pr_url}")
+            print(
+                f"  [{i}/{len(to_backfill)}] Skipping malformed URL: {pr_url}"
+            )
             continue
 
         print(f"  [{i}/{len(to_backfill)}] {pr_url} ...", end=" ", flush=True)
