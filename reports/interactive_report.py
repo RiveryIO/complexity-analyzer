@@ -903,6 +903,19 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       color: var(--text-muted);
       margin-top: 0.3rem;
     }}
+    /* Leaderboard tab */
+    .lb-panel {{ padding: 1.5rem 0; }}
+    .lb-header {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }}
+    .lb-header h2 {{ font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 700; margin: 0; }}
+    .lb-periods {{ display: flex; gap: 0.5rem; }}
+    .lb-period {{ padding: 0.4rem 1rem; border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg-card); cursor: pointer; font-family: inherit; font-size: 0.85rem; color: var(--text-muted); transition: border-color 0.15s, color 0.15s, background 0.15s; }}
+    .lb-period.active {{ border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }}
+    .lb-rank {{ font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; text-align: center; width: 2.5rem; }}
+    .lb-count {{ font-family: 'IBM Plex Mono', monospace; font-weight: 500; color: var(--accent); }}
+    .lb-reviewer {{ font-weight: 500; }}
+    .gold-row td   {{ background: rgba(251, 191, 36, 0.10) !important; }}
+    .silver-row td {{ background: rgba(156, 163, 175, 0.12) !important; }}
+    .bronze-row td {{ background: rgba(180, 83, 9, 0.07) !important; }}
   </style>
 </head>
 <body>
@@ -940,8 +953,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     const chartData = {chart_data_json};
     const engineersData = {engineers_json};
     const changelogData = {changelog_json};
-    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced', 'features', 'todo', 'engineers', 'changelog'];
-    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced', features: 'Features', todo: 'Roadmap', engineers: 'Engineers', changelog: 'Changelog' }};
+    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced', 'features', 'leaderboard', 'todo', 'engineers', 'changelog'];
+    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced', features: 'Features', leaderboard: 'Leaderboard', todo: 'Roadmap', engineers: 'Engineers', changelog: 'Changelog' }};
 
     const CHART_THEME = {{
       backgroundColor: 'transparent',
@@ -1375,6 +1388,68 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           </div>
           <div class="todo-list">${{items}}</div>
         </div>`;
+        panelsEl.appendChild(panel);
+        return;
+      }}
+
+      if (key === 'leaderboard') {{
+        const lbData = (chartData['leaderboard'] || {{}});
+        let activePeriod = '30d';
+
+        function renderLbTable(period) {{
+          const rows = lbData[period] || [];
+          const medals = ['\U0001F947', '\U0001F948', '\U0001F949'];
+          const rowClasses = ['gold-row', 'silver-row', 'bronze-row'];
+          if (!rows.length) {{
+            document.getElementById('lb-tbody').innerHTML =
+              '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">No approval data for this period</td></tr>';
+            return;
+          }}
+          document.getElementById('lb-tbody').innerHTML = rows.map((r, i) => {{
+            const cls = i < 3 ? rowClasses[i] : '';
+            const rank = i < 3 ? medals[i] : (i + 1);
+            return `<tr class="${{cls}}">
+              <td class="lb-rank">${{rank}}</td>
+              <td class="lb-reviewer">${{r.reviewer}}</td>
+              <td>${{r.team || '\u2014'}}</td>
+              <td class="lb-count">${{r.approvals}}</td>
+              <td>${{r.avg_complexity.toFixed(1)}}</td>
+            </tr>`;
+          }}).join('');
+        }}
+
+        panel.innerHTML = `<div class="lb-panel">
+          <div class="lb-header">
+            <h2>Top Reviewers</h2>
+            <div class="lb-periods">
+              <button class="lb-period active" data-period="30d">Last Month</button>
+              <button class="lb-period" data-period="90d">Last Quarter</button>
+              <button class="lb-period" data-period="all">All Time</button>
+            </div>
+          </div>
+          <table class="dd-table">
+            <thead>
+              <tr>
+                <th style="width:3rem">#</th>
+                <th>Reviewer</th>
+                <th>Team</th>
+                <th>Approvals</th>
+                <th>Avg Complexity</th>
+              </tr>
+            </thead>
+            <tbody id="lb-tbody"></tbody>
+          </table>
+        </div>`;
+
+        panel.querySelectorAll('.lb-period').forEach(btn => {{
+          btn.addEventListener('click', () => {{
+            panel.querySelectorAll('.lb-period').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderLbTable(btn.dataset.period);
+          }});
+        }});
+
+        renderLbTable(activePeriod);
         panelsEl.appendChild(panel);
         return;
       }}
