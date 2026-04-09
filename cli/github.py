@@ -544,10 +544,18 @@ def fetch_first_approver(
                 return ""
             response.raise_for_status()
             reviews = response.json()
+    except httpx.HTTPStatusError as exc:
+        raise GitHubAPIError(
+            exc.response.status_code, exc.response.text[:500], url
+        ) from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError(f"Failed to fetch PR reviews: {exc}") from exc
+
+    try:
         approved = [r for r in reviews if r.get("state") == "APPROVED"]
         approved.sort(key=lambda r: r.get("submitted_at", ""))
         return approved[0]["user"]["login"] if approved else ""
-    except (httpx.HTTPStatusError, httpx.RequestError, KeyError, IndexError):
+    except (KeyError, IndexError):
         return ""
 
 

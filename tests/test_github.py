@@ -1,6 +1,7 @@
 """Tests for GitHub module."""
 
 import time
+import httpx
 import pytest
 from datetime import datetime
 from unittest.mock import patch, Mock
@@ -562,3 +563,23 @@ def test_fetch_first_approver_404_returns_empty(mock_client_class):
 
     result = fetch_first_approver("owner", "repo", 123, token="tok")
     assert result == ""
+
+
+@patch("cli.github.httpx.Client")
+def test_fetch_first_approver_500_raises(mock_client_class):
+    """Non-404 HTTP errors raise GitHubAPIError."""
+    from cli.github import GitHubAPIError
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.text = "Internal Server Error"
+    exc = httpx.HTTPStatusError("500", request=Mock(), response=mock_response)
+    mock_response.raise_for_status = Mock(side_effect=exc)
+
+    mock_client = Mock()
+    mock_client.__enter__ = Mock(return_value=mock_client)
+    mock_client.__exit__ = Mock(return_value=False)
+    mock_client.get.return_value = mock_response
+    mock_client_class.return_value = mock_client
+
+    with pytest.raises(GitHubAPIError):
+        fetch_first_approver("owner", "repo", 123, token="tok")
