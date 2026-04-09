@@ -6,6 +6,7 @@ from datetime import datetime
 from unittest.mock import patch, Mock
 from cli.github import (
     fetch_pr_diff,
+    fetch_first_approver,
     search_closed_prs,
     TokenRotator,
     _fetch_all_pr_files,
@@ -499,3 +500,65 @@ class TestFetchPrDiff406Fallback:
         with pytest.raises(GitHubAPIError) as exc_info:
             fetch_pr_diff("owner", "repo", 42, token="tok")
         assert exc_info.value.status_code == 404
+
+
+# fetch_first_approver tests
+
+
+@patch("cli.github.httpx.Client")
+def test_fetch_first_approver_returns_first_approved(mock_client_class):
+    """Returns login of the first APPROVED review sorted by submitted_at."""
+    reviews = [
+        {"state": "COMMENTED", "submitted_at": "2026-03-01T10:00:00Z", "user": {"login": "charlie"}},
+        {"state": "APPROVED",  "submitted_at": "2026-03-02T10:00:00Z", "user": {"login": "alice"}},
+        {"state": "APPROVED",  "submitted_at": "2026-03-03T10:00:00Z", "user": {"login": "bob"}},
+    ]
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = reviews
+    mock_response.raise_for_status = Mock()
+
+    mock_client = Mock()
+    mock_client.__enter__ = Mock(return_value=mock_client)
+    mock_client.__exit__ = Mock(return_value=False)
+    mock_client.get.return_value = mock_response
+    mock_client_class.return_value = mock_client
+
+    result = fetch_first_approver("owner", "repo", 123, token="tok")
+    assert result == "alice"
+
+
+@patch("cli.github.httpx.Client")
+def test_fetch_first_approver_no_approvals_returns_empty(mock_client_class):
+    """Returns '' when no APPROVED reviews exist."""
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [
+        {"state": "COMMENTED", "submitted_at": "2026-03-01T10:00:00Z", "user": {"login": "charlie"}},
+    ]
+    mock_response.raise_for_status = Mock()
+
+    mock_client = Mock()
+    mock_client.__enter__ = Mock(return_value=mock_client)
+    mock_client.__exit__ = Mock(return_value=False)
+    mock_client.get.return_value = mock_response
+    mock_client_class.return_value = mock_client
+
+    result = fetch_first_approver("owner", "repo", 123, token="tok")
+    assert result == ""
+
+
+@patch("cli.github.httpx.Client")
+def test_fetch_first_approver_404_returns_empty(mock_client_class):
+    """Returns '' when GitHub returns 404 (e.g. private repo without access)."""
+    mock_response = Mock()
+    mock_response.status_code = 404
+
+    mock_client = Mock()
+    mock_client.__enter__ = Mock(return_value=mock_client)
+    mock_client.__exit__ = Mock(return_value=False)
+    mock_client.get.return_value = mock_response
+    mock_client_class.return_value = mock_client
+
+    result = fetch_first_approver("owner", "repo", 123, token="tok")
+    assert result == ""

@@ -513,6 +513,44 @@ def fetch_pr_metadata(
         raise RuntimeError(f"Failed to fetch PR metadata: {e}")
 
 
+def fetch_first_approver(
+    owner: str,
+    repo: str,
+    pr: int,
+    token: Optional[str] = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> str:
+    """Return the login of the first PR approver, or '' if none.
+
+    Calls GET /repos/{owner}/{repo}/pulls/{pr}/reviews and returns the
+    login of the earliest review with state == "APPROVED".
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        pr: PR number
+        token: GitHub token (optional for public repos)
+        timeout: Request timeout in seconds
+
+    Returns:
+        GitHub login of first approver, or empty string if no approvals
+    """
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr}/reviews"
+    headers = build_github_headers(token)
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(url, headers=headers)
+            if response.status_code == 404:
+                return ""
+            response.raise_for_status()
+            reviews = response.json()
+        approved = [r for r in reviews if r.get("state") == "APPROVED"]
+        approved.sort(key=lambda r: r.get("submitted_at", ""))
+        return approved[0]["user"]["login"] if approved else ""
+    except (httpx.HTTPStatusError, httpx.RequestError, KeyError, IndexError):
+        return ""
+
+
 def fetch_pr(
     owner: str,
     repo: str,
