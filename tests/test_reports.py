@@ -42,15 +42,18 @@ def test_load_dataframe_legacy_author(tmp_path):
 
 @pytest.mark.skipif(not SAMPLE_CSV.exists(), reason="Sample CSV fixture not found")
 def test_run_reports_generates_files(tmp_path):
-    """Test run_reports generates PNG files from sample CSV."""
+    """Test run_reports generates report files (PNG + HTML) from sample CSV."""
     output_dir = tmp_path / "reports"
     generated = run_reports(csv_path=SAMPLE_CSV, output_dir=output_dir)
 
     assert len(generated) >= 10
-    for path in generated:
+    # Separate HTML (interactive report) from PNG files
+    html_files = [p for p in generated if Path(p).suffix == ".html"]
+    png_files = [p for p in generated if Path(p).suffix == ".png"]
+    assert len(html_files) >= 1, "Expected at least one HTML interactive report"
+    for path in png_files:
         p = Path(path)
         assert p.exists()
-        assert p.suffix == ".png"
         assert (
             p.stat().st_size >= MIN_PNG_SIZE_BYTES
         ), f"Report {path} is too small ({p.stat().st_size} bytes), likely empty"

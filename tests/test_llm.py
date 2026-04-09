@@ -228,8 +228,9 @@ class TestCreateLLMProvider:
 
     def test_create_anthropic_provider_requires_key(self):
         """Test that Anthropic provider requires API key."""
-        with pytest.raises(ValueError, match="Anthropic API key is required"):
-            create_llm_provider("anthropic")
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="Anthropic API key is required"):
+                create_llm_provider("anthropic")
 
     def test_unknown_provider_raises(self):
         """Test that unknown provider raises ValueError."""

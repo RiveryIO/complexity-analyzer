@@ -34,14 +34,15 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
         return charts
 
     df = df.copy()
-    df["week"] = pd.to_datetime(df["date"]).dt.to_period("W")
+    df["_dt"] = pd.to_datetime(df["date"], format="mixed", utc=False, errors="coerce")
+    df["week"] = df["_dt"].dt.to_period("W")
     df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
 
     # 22: Velocity per capita – org-wide total (first chart)
     non_bot_df = df[~df["team"].isin(["Bots", "Unknown", ""])]
-    df["week_ts"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
+    df["week_ts"] = df["_dt"].dt.to_period("W").dt.start_time
     non_bot_df_ts = non_bot_df.copy()
-    non_bot_df_ts["week_ts"] = pd.to_datetime(non_bot_df_ts["date"]).dt.to_period("W").dt.start_time
+    non_bot_df_ts["week_ts"] = non_bot_df_ts["_dt"].dt.to_period("W").dt.start_time
     weekly_vel = non_bot_df_ts.groupby("week_ts")["complexity"].sum() if not non_bot_df_ts.empty else pd.Series(dtype=float)
     if not weekly_vel.empty:
         week_dates = sorted(weekly_vel.index)
@@ -81,7 +82,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
         })
 
     # 18: Volume by month (bar)
-    df["month"] = pd.to_datetime(df["date"]).dt.to_period("M")
+    df["month"] = df["_dt"].dt.to_period("M")
     monthly = df.groupby("month")["complexity"].sum()
     if not monthly.empty:
         charts.append({
@@ -279,14 +280,14 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
 
     # Pre-compute headcounts for per-team velocity per capita
     all_teams = sorted(t for t in df_full["team"].unique() if t != "Bots")
-    df_full_weeks = pd.to_datetime(df_full["date"]).dt.to_period("W").dt.start_time
+    df_full_weeks = pd.to_datetime(df_full["date"], format="mixed", utc=False, errors="coerce").dt.to_period("W").dt.start_time
     all_week_dates = sorted(df_full_weeks.unique())
     week_as_date = [w.date() if hasattr(w, "date") else w for w in all_week_dates]
     headcounts = get_weekly_headcounts(week_as_date, teams=all_teams)
 
     for team in all_teams:
         tdf = df_full[df_full["team"] == team].copy()
-        tdf["week"] = pd.to_datetime(tdf["date"]).dt.to_period("W").dt.start_time
+        tdf["week"] = pd.to_datetime(tdf["date"], format="mixed", utc=False, errors="coerce").dt.to_period("W").dt.start_time
 
         # 22-T: Velocity per capita (first in each team sub-tab)
         team_weekly = tdf.groupby("week")["complexity"].sum()
@@ -352,7 +353,7 @@ def _extract_risk(df: pd.DataFrame) -> List[Dict[str, Any]]:
 
     # 08: Complexity by weekday (bar)
     df = df.copy()
-    df["weekday"] = pd.to_datetime(df["date"]).dt.dayofweek
+    df["weekday"] = pd.to_datetime(df["date"], format="mixed", utc=False, errors="coerce").dt.dayofweek
     df["weekday_name"] = df["weekday"].map({0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"})
     avg = df.groupby("weekday_name")["complexity"].mean().reindex(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
     if not avg.isna().all():
@@ -431,7 +432,7 @@ def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
         return charts
 
     df = df.copy()
-    df["week"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
+    df["week"] = pd.to_datetime(df["date"], format="mixed", utc=False, errors="coerce").dt.to_period("W").dt.start_time
 
     # 21: Developer line velocity (multi-line)
     dev_col = "developer" if "developer" in df.columns else "author"
@@ -486,7 +487,7 @@ def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
 
     # 16: Cumulative complexity by week (area/line)
     df_cum = df.copy()
-    df_cum["week"] = pd.to_datetime(df_cum["date"]).dt.to_period("W").dt.start_time
+    df_cum["week"] = pd.to_datetime(df_cum["date"], format="mixed", utc=False, errors="coerce").dt.to_period("W").dt.start_time
     weekly_sum = df_cum.groupby("week")["complexity"].sum().sort_index()
     cumulative = weekly_sum.cumsum()
     if not cumulative.empty:
@@ -671,6 +672,14 @@ def _extract_leaderboard(df: pd.DataFrame) -> Dict[str, Any]:
 
 def build_all_chart_data(df: pd.DataFrame) -> Dict[str, Any]:
     """Build chart data for all tabs. Returns {tab: [chart_data, ...]}."""
+    # Ensure numeric and date columns are properly typed regardless of how the df was loaded
+    df = df.copy()
+    for col in ("complexity", "lines_added", "lines_deleted"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    for col in ("date", "merged_at", "created_at"):
+        if col in df.columns and not pd.api.types.is_datetime64_any_dtype(df[col]):
+            df[col] = pd.to_datetime(df[col], format="mixed", utc=False, errors="coerce")
     features_data = _extract_features()
     return {
         "basic": _extract_basic(df),
