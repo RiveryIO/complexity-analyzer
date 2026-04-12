@@ -1316,6 +1316,57 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       return chart;
     }}
 
+    function renderDevVelocityMultiLine(container, c) {{
+      const chart = echarts.init(container, null, {{renderer: 'canvas'}});
+      const weeks = c.x || [];
+      const series = (c.series || []).map(s => ({{
+        name: s.name,
+        type: 'line',
+        data: s.data,
+        _prCounts: s.prCounts,
+        symbol: 'circle',
+        symbolSize: 8,
+        emphasis: {{ scale: 1.5 }},
+        smooth: false,
+        connectNulls: false,
+      }}));
+      chart.setOption({{
+        ...CHART_THEME,
+        legend: {{
+          type: 'scroll',
+          bottom: 0,
+          textStyle: {{fontSize: 11}},
+        }},
+        grid: {{top: 28, right: 16, bottom: 60, left: 48, containLabel: false}},
+        xAxis: {{
+          type: 'category',
+          data: weeks,
+          axisLabel: {{rotate: 45, fontSize: 10}},
+        }},
+        yAxis: {{
+          type: 'value',
+          name: 'Complexity',
+          nameTextStyle: {{fontSize: 10}},
+        }},
+        tooltip: {{
+          trigger: 'axis',
+          axisPointer: {{type: 'cross'}},
+          formatter: function(params) {{
+            let out = `<div style="font-weight:600;margin-bottom:4px">${{params[0].axisValue}}</div>`;
+            params.forEach(p => {{
+              const s = series.find(x => x.name === p.seriesName);
+              const cnt = s && s._prCounts ? s._prCounts[p.dataIndex] : 0;
+              if (cnt === 0) return;
+              out += `<div>${{p.marker}}${{p.seriesName}}: <b>${{p.value}}</b> <span style="color:var(--text-muted);font-size:0.85em">(${{cnt}} PR${{cnt !== 1 ? 's' : ''}})</span></div>`;
+            }});
+            return out || params[0].axisValue;
+          }},
+        }},
+        series,
+      }});
+      return chart;
+    }}
+
     function renderChart(container, c) {{
       const type = c.type || 'bar';
       if (type === 'bar') return renderBar(container, c);
@@ -1327,6 +1378,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       if (type === 'scatterLabel') return renderScatterLabel(container, c);
       if (type === 'boxplot') return renderBoxplot(container, c);
       if (type === 'area') return renderArea(container, c);
+      if (type === 'devVelocityMultiLine') return renderDevVelocityMultiLine(container, c);
       return renderBar(container, c);
     }}
 
