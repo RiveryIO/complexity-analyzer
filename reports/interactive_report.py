@@ -1884,6 +1884,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     const ddClose = document.getElementById('dd-close');
 
     function openDevPrModal(developer, week, prs) {{
+      const ddOverlay = document.getElementById('drilldown-overlay');
+      const ddTitle = document.getElementById('dd-title');
+      const ddBody = document.getElementById('dd-body');
       const weekDate = new Date(week + 'T00:00:00');
       const weekFmt = weekDate.toLocaleDateString('en-US', {{month: 'short', day: 'numeric', year: 'numeric'}});
       const totalComplexity = prs.reduce((sum, pr) => sum + (pr.complexity || 0), 0).toFixed(1);
