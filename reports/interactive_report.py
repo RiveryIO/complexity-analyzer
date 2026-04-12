@@ -1805,7 +1805,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     const allChartEntries = [];
 
     tabOrder.forEach(key => {{
-      (chartData[key] || []).forEach((c, idx) => {{
+      const _tabVal = chartData[key];
+      if (!Array.isArray(_tabVal)) return;
+      _tabVal.forEach((c, idx) => {{
         allChartEntries.push({{ tab: key, idx, data: c, title: c.title || '', subtitle: c.subtitle || '' }});
       }});
     }});

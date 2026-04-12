@@ -949,6 +949,7 @@ def run_batch_analysis(
             lines_added=lines_added,
             lines_deleted=lines_deleted,
             approved_by=approved_by,
+            pr_title=result.get("title", ""),
         )
 
     try:
@@ -1378,6 +1379,7 @@ def run_batch_analysis_with_labels(
                             lines_added=lines_added,
                             lines_deleted=lines_deleted,
                             source=result.get("source"),
+                            pr_title=result.get("title", ""),
                         )
 
                     if label_applied:
@@ -1443,6 +1445,7 @@ def run_batch_analysis_with_labels(
                                     lines_added=lines_added,
                                     lines_deleted=lines_deleted,
                                     source=result.get("source"),
+                                    pr_title=result.get("title", ""),
                                 )
 
                             with completed_lock:

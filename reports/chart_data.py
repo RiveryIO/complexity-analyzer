@@ -87,8 +87,9 @@ def _build_team_dev_prs(df: pd.DataFrame) -> Dict[str, Any]:
         else:
             merged_at = ""
 
+        pr_title = str(row.get("pr_title", "") or "").strip()
         pr_dict = {
-            "title": _pr_title_from_url(pr_url),
+            "title": pr_title if pr_title else _pr_title_from_url(pr_url),
             "url": pr_url,
             "complexity": float(row.get("complexity", 0) or 0),
             "merged_at": merged_at,
