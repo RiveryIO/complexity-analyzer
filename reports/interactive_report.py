@@ -149,16 +149,18 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
   <style>
     :root {{
-      --bg-deep: #f5f6f8;
+      --bg-deep: #f8f9fa;
       --bg-card: #ffffff;
-      --bg-elevated: #f0f1f3;
-      --border: #e2e4e8;
-      --text: #1a1d24;
-      --text-muted: #6b7280;
+      --bg-elevated: #f1f3f5;
+      --border: #e9ecef;
+      --border-light: #f1f3f5;
+      --text: #212529;
+      --text-muted: #6c757d;
       --accent: #b45309;
-      --accent-dim: rgba(180, 83, 9, 0.12);
+      --accent-dim: rgba(180, 83, 9, 0.08);
     }}
     * {{ box-sizing: border-box; }}
+    html {{ scroll-behavior: smooth; }}
     body {{
       font-family: 'IBM Plex Sans', system-ui, sans-serif;
       margin: 0;
@@ -167,11 +169,11 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       min-height: 100vh;
       line-height: 1.5;
     }}
-    .page {{ max-width: 1440px; margin: 0 auto; padding: 2rem 2.5rem 4rem; }}
-    header {{ margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); }}
-    .header-row {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; }}
+    .page {{ max-width: 1440px; margin: 0 auto; padding: 3rem 3rem 5rem; }}
+    header {{ margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border-light); }}
+    .header-row {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; }}
     .header-text {{ flex: 1; }}
-    h1 {{ font-family: 'Syne', sans-serif; font-size: 1.85rem; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 0.4rem; }}
+    h1 {{ font-family: 'Syne', sans-serif; font-size: 2.25rem; font-weight: 700; letter-spacing: -0.04em; margin: 0 0 0.5rem; color: var(--text); }}
     .subtitle {{ font-size: 0.95rem; color: var(--text-muted); }}
     .global-search {{
       position: relative;
@@ -238,57 +240,183 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     #search-results.active {{ display: block; }}
     #search-results .grid {{ grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); }}
     .tabs {{
-      display: flex; gap: 0.2rem; margin-bottom: 2rem; padding: 0.3rem;
-      background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border); overflow-x: auto;
+      display: flex; gap: 0.5rem; margin-bottom: 1.5rem; padding: 0.75rem 0;
+      border-bottom: 2px solid var(--border-light); overflow-x: auto;
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(248, 249, 250, 0.92); backdrop-filter: blur(8px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }}
     .tab {{
-      padding: 0.6rem 1.2rem; font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 500;
-      background: transparent; color: var(--text-muted); border: none; border-radius: 8px;
-      cursor: pointer; transition: color 0.2s, background 0.2s;
+      padding: 0.75rem 1.5rem; font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 600;
+      background: transparent; color: var(--text-muted); border: none; border-bottom: 3px solid transparent;
+      cursor: pointer; transition: color 0.2s, border-color 0.2s; margin-bottom: -2px;
     }}
-    .tab:hover {{ color: var(--text); background: var(--bg-elevated); }}
-    .tab.active {{ color: var(--accent); background: var(--accent-dim); }}
+    .tab:hover {{ color: var(--text); }}
+    .tab.active {{ color: var(--accent); border-bottom-color: var(--accent); }}
     .panel {{ display: none; animation: fadeIn 0.25s ease; }}
     .panel.active {{ display: block; }}
     @keyframes fadeIn {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
     .subtabs {{
-      display: flex; gap: 0.15rem; margin-bottom: 1.5rem; padding: 0.25rem;
-      background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border); overflow-x: auto;
+      display: flex; gap: 0.5rem; margin-bottom: 2.5rem; padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border-light); overflow-x: auto;
+      position: sticky; top: 60px; z-index: 99;
+      background: rgba(248, 249, 250, 0.92); backdrop-filter: blur(8px);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
     }}
     .subtab {{
-      padding: 0.45rem 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; font-weight: 500;
+      padding: 0.5rem 1rem; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 0.9rem; font-weight: 500;
       background: transparent; color: var(--text-muted); border: none; border-radius: 6px;
       cursor: pointer; transition: color 0.15s, background 0.15s; white-space: nowrap;
     }}
-    .subtab:hover {{ color: var(--text); background: var(--bg-card); }}
-    .subtab.active {{ color: var(--accent); background: var(--accent-dim); }}
+    .subtab:hover {{ color: var(--text); background: var(--bg-elevated); }}
+    .subtab.active {{ color: var(--text); background: var(--accent-dim); font-weight: 600; }}
     .subpanel {{ display: none; animation: fadeIn 0.2s ease; }}
     .subpanel.active {{ display: block; }}
     .grid {{
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); gap: 1.5rem;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(500px, 1fr)); gap: 2rem;
+    }}
+    .section-divider {{
+      grid-column: 1 / -1;
+      margin: 2rem 0 1rem;
+      padding-top: 1.5rem;
+      border-top: 2px solid var(--border-light);
+    }}
+    .section-title {{
+      font-family: 'Syne', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }}
+    .section-title::before {{
+      content: '';
+      width: 4px;
+      height: 1.1rem;
+      background: var(--accent);
+      border-radius: 2px;
+    }}
+    .jump-nav {{
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 2rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }}
+    .jump-nav-label {{
+      font-family: 'Syne', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 0.5rem;
+    }}
+    .jump-link {{
+      font-family: 'IBM Plex Sans', system-ui, sans-serif;
+      font-size: 0.85rem;
+      color: var(--accent);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      text-decoration: none;
+    }}
+    .jump-link:hover {{
+      background: var(--accent-dim);
+      border-color: var(--accent);
     }}
     .chart-card {{
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
-      overflow: hidden; padding: 1rem; transition: box-shadow 0.2s;
+      background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px;
+      overflow: hidden; padding: 1.5rem; transition: box-shadow 0.2s, border-color 0.2s;
+      scroll-margin-top: 140px;
     }}
-    .chart-card:hover {{ box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
-    .chart-card h3 {{ font-family: 'Syne', sans-serif; font-size: 0.95rem; font-weight: 600; margin: 0 0 0.25rem; }}
-    .chart-card .sub {{ font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem; }}
+    .chart-card:hover {{ box-shadow: 0 8px 24px rgba(0,0,0,0.06); border-color: var(--border); }}
+    .chart-card h3 {{ font-family: 'Syne', sans-serif; font-size: 1.05rem; font-weight: 700; margin: 0 0 0.4rem; color: var(--text); }}
+    .chart-card .sub {{ font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5; }}
     .chart-card .sub .hero-stat {{
-      display: inline-flex; align-items: baseline; gap: 0.3rem;
-      margin-left: 0.6rem; padding: 0.15rem 0.6rem 0.15rem 0.5rem;
-      background: linear-gradient(135deg, var(--accent-dim), rgba(180,83,9,0.06));
-      border: 1px solid rgba(180,83,9,0.18);
-      border-radius: 6px; font-family: 'IBM Plex Mono', monospace;
-      letter-spacing: -0.02em; line-height: 1;
+      display: inline-flex; align-items: baseline; gap: 0.4rem;
+      margin-left: 0.75rem; padding: 0.3rem 0.9rem;
+      background: var(--accent-dim);
+      border: 1px solid rgba(180,83,9,0.15);
+      border-radius: 8px; font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: -0.01em; line-height: 1;
     }}
     .chart-card .sub .hero-stat .hero-val {{
-      font-size: 1.05rem; font-weight: 600; color: var(--accent);
+      font-size: 1.35rem; font-weight: 700; color: var(--accent);
     }}
     .chart-card .sub .hero-stat .hero-unit {{
-      font-size: 0.7rem; font-weight: 500; color: var(--accent); opacity: 0.72;
+      font-size: 0.75rem; font-weight: 500; color: var(--accent); opacity: 0.7;
     }}
     .chart-container {{ width: 100%; height: 320px; }}
+
+    /* Hero dashboard stats */
+    .hero-section {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+      padding: 2rem 0 0;
+    }}
+    .hero-card {{
+      background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+      border: 1px solid var(--border-light);
+      border-radius: 16px;
+      padding: 2rem 1.75rem;
+      text-align: center;
+      transition: transform 0.2s, box-shadow 0.2s;
+      position: relative;
+      overflow: hidden;
+    }}
+    .hero-card:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.08);
+    }}
+    .hero-card::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent) 0%, #d97706 100%);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }}
+    .hero-card:hover::before {{
+      opacity: 1;
+    }}
+    .hero-value {{
+      font-family: 'Syne', sans-serif;
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.04em;
+    }}
+    .hero-label {{
+      font-family: 'IBM Plex Sans', system-ui, sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }}
+    .hero-sublabel {{
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      opacity: 0.7;
+    }}
 
     /* Developer picker for multiLine charts */
     .chart-card.has-picker {{
@@ -934,6 +1062,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </header>
     <div class="tabs" id="tabs"></div>
+    <div class="subtabs" id="subtabs-nav" style="display: none;"></div>
     <div id="panels"></div>
     <div id="search-results"></div>
   </div>
@@ -949,12 +1078,33 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- Developer drill modal -->
+  <div class="drilldown-overlay" id="dev-drill-overlay">
+    <div class="drilldown-modal">
+      <div class="drilldown-header">
+        <h2 id="dev-drill-title">Developer PRs</h2>
+        <button class="drilldown-close" id="dev-drill-close">&times;</button>
+      </div>
+      <div class="drilldown-body" id="dev-drill-body"></div>
+    </div>
+  </div>
+
   <script>
     const chartData = {chart_data_json};
     const engineersData = {engineers_json};
     const changelogData = {changelog_json};
-    const tabOrder = ['basic', 'team', 'risk', 'fairness', 'advanced', 'features', 'leaderboard', 'todo', 'engineers', 'changelog'];
-    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', advanced: 'Advanced', features: 'Features', leaderboard: 'Leaderboard', todo: 'Roadmap', engineers: 'Engineers', changelog: 'Changelog' }};
+    const heroStats = chartData._hero_stats || {{}};
+    // Tab groups: consolidate 10 tabs → 4 main groups
+    const tabGroups = {{
+      overview: {{ label: '📊 Overview', tabs: ['basic', 'team'] }},
+      analytics: {{ label: '🔍 Analytics', tabs: ['features', 'risk', 'fairness'] }},
+      people: {{ label: '👥 People', tabs: ['engineers', 'leaderboard'] }},
+      planning: {{ label: '📋 Planning', tabs: ['todo', 'changelog'] }}
+    }};
+    const groupOrder = ['overview', 'analytics', 'people', 'planning'];
+    const tabLabels = {{ basic: 'Basic', team: 'Team', risk: 'Risk', fairness: 'Fairness', features: 'Features', leaderboard: 'Leaderboard', todo: 'Roadmap', engineers: 'Engineers', changelog: 'Changelog' }};
+    // Flatten for backwards compat
+    const tabOrder = groupOrder.flatMap(g => tabGroups[g].tabs);
 
     const CHART_THEME = {{
       backgroundColor: 'transparent',
@@ -968,9 +1118,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     function syncURL() {{
       const params = new URLSearchParams();
-      const activeTab = document.querySelector('.tab.active');
-      if (activeTab && activeTab.dataset.tab !== tabOrder[0]) {{
-        params.set('tab', activeTab.dataset.tab);
+      const firstTab = tabGroups[groupOrder[0]].tabs[0];
+      if (activeTab && activeTab !== firstTab) {{
+        params.set('tab', activeTab);
       }}
       const q = document.getElementById('chart-search').value.trim();
       if (q) params.set('q', q);
@@ -1383,26 +1533,66 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     }}
 
     const tabsEl = document.getElementById('tabs');
+    const subtabsEl = document.getElementById('subtabs-nav');
     const panelsEl = document.getElementById('panels');
 
     const chartInstances = {{}};
+    let activeGroup = groupOrder[0];
+    let activeTab = tabGroups[activeGroup].tabs[0];
 
-    tabOrder.forEach((key, i) => {{
+    // Render main tab groups
+    groupOrder.forEach((groupKey, i) => {{
+      const group = tabGroups[groupKey];
       const btn = document.createElement('button');
       btn.className = 'tab' + (i === 0 ? ' active' : '');
-      btn.textContent = tabLabels[key];
-      btn.dataset.tab = key;
+      btn.textContent = group.label;
+      btn.dataset.group = groupKey;
       btn.onclick = () => {{
+        activeGroup = groupKey;
+        activeTab = group.tabs[0];
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
-        const panel = document.getElementById('panel-' + key);
-        panel.classList.add('active');
-        (chartInstances[key] || []).forEach(ch => ch.resize());
+        renderSubtabs();
+        showPanel(activeTab);
         syncURL();
       }};
       tabsEl.appendChild(btn);
     }});
+
+    function renderSubtabs() {{
+      const group = tabGroups[activeGroup];
+      if (group.tabs.length === 1) {{
+        subtabsEl.style.display = 'none';
+        return;
+      }}
+      subtabsEl.style.display = 'flex';
+      subtabsEl.innerHTML = '';
+      group.tabs.forEach((tabKey, i) => {{
+        const btn = document.createElement('button');
+        btn.className = 'subtab' + (tabKey === activeTab ? ' active' : '');
+        btn.textContent = tabLabels[tabKey];
+        btn.dataset.tab = tabKey;
+        btn.onclick = () => {{
+          activeTab = tabKey;
+          document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+          btn.classList.add('active');
+          showPanel(tabKey);
+          syncURL();
+        }};
+        subtabsEl.appendChild(btn);
+      }});
+    }}
+
+    function showPanel(tabKey) {{
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      const panel = document.getElementById('panel-' + tabKey);
+      if (panel) {{
+        panel.classList.add('active');
+        (chartInstances[tabKey] || []).forEach(ch => ch.resize());
+      }}
+    }}
+
+    renderSubtabs();
 
     const TODO_ITEMS = [
       {{
@@ -1679,7 +1869,30 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       const charts = chartData[key] || [];
 
       let summaryHtml = '';
-      if (key === 'features' && featuresRows.length) {{
+      if (key === 'basic') {{
+        summaryHtml = `<div class="hero-section">
+          <div class="hero-card">
+            <div class="hero-value">${{heroStats.velocity_per_capita || 0}}</div>
+            <div class="hero-label">Velocity/Dev</div>
+            <div class="hero-sublabel">Complexity per capita per week</div>
+          </div>
+          <div class="hero-card">
+            <div class="hero-value">${{heroStats.active_developers || 0}}</div>
+            <div class="hero-label">Active Devs</div>
+            <div class="hero-sublabel">Last 30 days</div>
+          </div>
+          <div class="hero-card">
+            <div class="hero-value">${{heroStats.total_prs || 0}}</div>
+            <div class="hero-label">Total PRs</div>
+            <div class="hero-sublabel">All time</div>
+          </div>
+          <div class="hero-card">
+            <div class="hero-value">${{heroStats.avg_complexity || 0}}</div>
+            <div class="hero-label">Avg Complexity</div>
+            <div class="hero-sublabel">Per PR</div>
+          </div>
+        </div>`;
+      }} else if (key === 'features' && featuresRows.length) {{
         const noBugs = featuresRows.filter(r => r.category !== 'bug_fix');
         const total = noBugs.length;
         const uf = noBugs.filter(r => r.is_user_facing === 'true').length;
@@ -1703,6 +1916,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
       function buildCardHtml(c, idx, key) {{
         const id = 'chart-' + key + '-' + idx;
+        const anchorId = 'anchor-' + key + '-' + idx;
         const hasPicker = c.hasPicker && c.series && c.series.length > 6;
         const isDrill = c.drilldown === true;
         let cardClass = hasPicker ? 'chart-card has-picker' : 'chart-card';
@@ -1716,12 +1930,24 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         const heroStat = c.overall_avg != null
           ? `<span class="hero-stat"><span class="hero-val">${{c.overall_avg}}</span><span class="hero-unit">${{heroUnit}}</span></span>`
           : '';
-        return `<div class="${{cardClass}}" data-chart-idx="${{idx}}" data-chart-tab="${{key}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}${{heroStat}}</div><div id="${{id}}" class="chart-container"></div>${{drillHint}}${{pickerHtml}}</div>`;
+        return `<div id="${{anchorId}}" class="${{cardClass}}" data-chart-idx="${{idx}}" data-chart-tab="${{key}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}${{heroStat}}</div><div id="${{id}}" class="chart-container"></div>${{drillHint}}${{pickerHtml}}</div>`;
       }}
 
       const hasSubtabs = charts.some(c => c._subtab);
 
-      let html = summaryHtml;
+      // Add jump navigation for panels with many charts
+      let jumpNavHtml = '';
+      if (charts.length >= 6 && !hasSubtabs) {{
+        jumpNavHtml = '<div class="jump-nav"><span class="jump-nav-label">Jump to:</span>';
+        charts.forEach((c, idx) => {{
+          const anchorId = 'anchor-' + key + '-' + idx;
+          const shortTitle = c.title.length > 30 ? c.title.substring(0, 27) + '...' : c.title;
+          jumpNavHtml += `<a href="#${{anchorId}}" class="jump-link">${{shortTitle}}</a>`;
+        }});
+        jumpNavHtml += '</div>';
+      }}
+
+      let html = summaryHtml + jumpNavHtml;
       if (hasSubtabs) {{
         const seen = new Set();
         const subtabOrder = [];
@@ -1742,9 +1968,35 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           html += '</div></div>';
         }});
       }} else {{
-        html += '<div class="grid">';
-        charts.forEach((c, idx) => {{ html += buildCardHtml(c, idx, key); }});
-        html += '</div>';
+        // Group charts by section if they have _section metadata
+        const hasSections = charts.some(c => c._section);
+        if (hasSections) {{
+          const sections = [];
+          const sectionMap = new Map();
+          charts.forEach((c, idx) => {{
+            const section = c._section || 'Other';
+            if (!sectionMap.has(section)) {{
+              sectionMap.set(section, []);
+              sections.push(section);
+            }}
+            sectionMap.get(section).push({{ chart: c, idx }});
+          }});
+
+          html += '<div class="grid">';
+          sections.forEach((section, sIdx) => {{
+            if (sIdx > 0) {{
+              html += `<div class="section-divider"><div class="section-title">${{section}}</div></div>`;
+            }}
+            sectionMap.get(section).forEach(item => {{
+              html += buildCardHtml(item.chart, item.idx, key);
+            }});
+          }});
+          html += '</div>';
+        }} else {{
+          html += '<div class="grid">';
+          charts.forEach((c, idx) => {{ html += buildCardHtml(c, idx, key); }});
+          html += '</div>';
+        }}
       }}
 
       panel.innerHTML = html;
@@ -1786,6 +2038,19 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
                 const team = c._subtab;
                 const prs = ((teamDevPrs[team] || {{}})[developer] || {{}})[week] || [];
                 if (prs.length > 0) openDevPrModal(developer, week, prs);
+              }});
+            }}
+            if (c.type === 'scatter' && c._pr_examples) {{
+              ch.on('click', function(params) {{
+                const linesChanged = params.data[0];
+                const complexity = params.data[1];
+                const complexityBucket = Math.floor(complexity);
+                const sizeBucket = Math.floor(linesChanged / 100) * 100;
+                const key = `${{complexityBucket}}_${{sizeBucket}}`;
+                const prs = c._pr_examples[key] || [];
+                if (prs.length > 0) {{
+                  openScatterPrModal(linesChanged, complexity, prs);
+                }}
               }});
             }}
           }}
@@ -1934,6 +2199,57 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       ddOverlay.classList.add('open');
     }}
 
+    function openScatterPrModal(linesChanged, complexity, prs) {{
+      const ddTitle = document.getElementById('dev-drill-title');
+      const ddBody = document.getElementById('dev-drill-body');
+      const ddOverlay = document.getElementById('dev-drill-overlay');
+
+      const complexityColor = (v) => {{
+        if (v >= 8) return '#991b1b';
+        if (v >= 5) return '#92400e';
+        return '#065f46';
+      }};
+      const complexityBg = (v) => {{
+        if (v >= 8) return '#fee2e2';
+        if (v >= 5) return '#fef3c7';
+        return '#d1fae5';
+      }};
+
+      ddTitle.textContent = `PR Examples \u2014 Lines: ~${{Math.floor(linesChanged / 100) * 100}}, Complexity: ~${{Math.floor(complexity)}}`;
+
+      let tableHtml = `<table class="dd-table">
+        <thead>
+          <tr>
+            <th>PR</th>
+            <th>Lines</th>
+            <th>Complexity</th>
+            <th>Link</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+      prs.forEach(pr => {{
+        const title = pr.title || pr.url || '\u2014';
+        const displayTitle = title.length > 60 ? title.slice(0, 60) + '\u2026' : title;
+        const lines = pr.lines_changed || 0;
+        const cx = pr.complexity || 0;
+        const badge = `<span style="display:inline-block;font-size:0.7rem;font-family:'Syne',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:${{complexityBg(cx)}};color:${{complexityColor(cx)}}">${{cx}}</span>`;
+        const link = pr.url
+          ? `<a href="${{pr.url}}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.85rem">\u2192 Open PR</a>`
+          : '\u2014';
+        tableHtml += `<tr>
+          <td class="cell-name" title="${{title}}"><span class="name-text">${{displayTitle}}</span></td>
+          <td style="text-align:center;font-size:0.85rem">${{lines.toLocaleString()}}</td>
+          <td style="text-align:center">${{badge}}</td>
+          <td>${{link}}</td>
+        </tr>`;
+      }});
+
+      tableHtml += '</tbody></table>';
+      ddBody.innerHTML = tableHtml;
+      ddOverlay.classList.add('open');
+    }}
+
     function openDrilldown(month, chartConfig, seriesName) {{
       let filtered = featuresRows.filter(r => r.month === month && r.category !== 'bug_fix');
       let title = `Features \u2014 ${{month}}`;
@@ -2027,13 +2343,48 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       if (e.key === 'Escape') closeDrilldown();
     }});
 
+    // Dev drill modal (for scatter charts)
+    const devDrillOverlay = document.getElementById('dev-drill-overlay');
+    const devDrillClose = document.getElementById('dev-drill-close');
+
+    function closeDevDrill() {{
+      devDrillOverlay.classList.remove('open');
+    }}
+
+    if (devDrillClose) {{
+      devDrillClose.addEventListener('click', closeDevDrill);
+    }}
+    if (devDrillOverlay) {{
+      devDrillOverlay.addEventListener('click', (e) => {{
+        if (e.target === devDrillOverlay) closeDevDrill();
+      }});
+    }}
+    document.addEventListener('keydown', (e) => {{
+      if (e.key === 'Escape') closeDevDrill();
+    }});
+
     // Restore state from URL on load
     (function restoreFromURL() {{
       const params = new URLSearchParams(window.location.search);
       const tab = params.get('tab');
       if (tab && tabOrder.includes(tab)) {{
-        const btn = document.querySelector(`.tab[data-tab="${{tab}}"]`);
-        if (btn) btn.click();
+        // Find which group contains this tab
+        let targetGroup = null;
+        for (const [gkey, gdata] of Object.entries(tabGroups)) {{
+          if (gdata.tabs.includes(tab)) {{
+            targetGroup = gkey;
+            break;
+          }}
+        }}
+        if (targetGroup) {{
+          activeGroup = targetGroup;
+          activeTab = tab;
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          const groupBtn = document.querySelector(`.tab[data-group="${{targetGroup}}"]`);
+          if (groupBtn) groupBtn.classList.add('active');
+          renderSubtabs();
+          showPanel(tab);
+        }}
       }}
       const q = params.get('q');
       if (q) {{

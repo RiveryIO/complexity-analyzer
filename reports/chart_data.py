@@ -159,6 +159,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "overall_avg_unit": "avg / week",
                 "x": week_labels,
                 "y": per_capita,
+                "_section": "Velocity Metrics",
             })
 
     # 01: Complexity volume over time (bar)
@@ -172,6 +173,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "subtitle": "Total complexity per week",
             "x": labels,
             "y": weekly.tolist(),
+            "_section": "Velocity Metrics",
         })
 
     # 18: Volume by month (bar)
@@ -185,6 +187,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "subtitle": "Total complexity per month",
             "x": [str(p) for p in monthly.index],
             "y": monthly.tolist(),
+            "_section": "Velocity Metrics",
         })
 
     # 02: PR count vs complexity (dual line)
@@ -201,6 +204,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "y1Name": "PR Count",
             "y2": weekly_agg["total_complexity"].tolist(),
             "y2Name": "Total Complexity",
+            "_section": "Velocity Metrics",
         })
 
     # 03: Avg complexity rolling (line)
@@ -215,6 +219,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "subtitle": "Smoothed avg complexity",
             "x": labels,
             "y": rolling.tolist(),
+            "_section": "Quality & Cycle Time",
         })
 
     # 19: Avg merge cycle time (line)
@@ -239,24 +244,25 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
                     "overall_avg": overall_avg,
                     "x": labels,
                     "y": weekly_cycle.tolist(),
+                    "_section": "Quality & Cycle Time",
                 })
 
-    # 07: High complexity frequency (bar)
-    tdf = df[df["team"] != "Unknown"]
-    if not tdf.empty:
-        high = tdf[tdf["complexity"] >= 6]
-        total = tdf.groupby("team").size()
-        high_count = high.groupby("team").size()
-        pct = (high_count.reindex(total.index, fill_value=0) / total * 100).fillna(0)
-        if total.sum() > 0:
-            charts.append({
-                "id": "07",
-                "type": "bar",
-                "title": "% High-Risk PRs (complexity ≥ 6) per Team",
-                "subtitle": "Share of risky PRs per team",
-                "x": pct.index.tolist(),
-                "y": pct.tolist(),
-            })
+    # 16: Cumulative complexity by week (area/line)
+    df_cum = df.copy()
+    df_cum["week_ts"] = pd.to_datetime(df_cum["date"], format="mixed", utc=False, errors="coerce").dt.to_period("W").dt.start_time
+    weekly_sum = df_cum.groupby("week_ts")["complexity"].sum().sort_index()
+    cumulative = weekly_sum.cumsum()
+    if not cumulative.empty:
+        weeks = [d.strftime("%Y-%m-%d") for d in cumulative.index]
+        charts.append({
+            "id": "16",
+            "type": "area",
+            "title": "Cumulative Velocity Over Time",
+            "subtitle": "Running total of complexity (by week)",
+            "x": weeks,
+            "y": cumulative.tolist(),
+            "_section": "Cumulative Trends",
+        })
 
     return charts
 
@@ -509,20 +515,80 @@ def _extract_fairness(df: pd.DataFrame) -> List[Dict[str, Any]]:
     if df.empty or len(df) < 2:
         return charts
 
-    # 10: PR size vs complexity (scatter)
-    corr = df["lines_changed"].corr(df["complexity"])
+    # 10: PR size vs complexity (scatter) - remove outliers using IQR
+    # Filter outliers on both axes
+    q1_lines = df["lines_changed"].quantile(0.25)
+    q3_lines = df["lines_changed"].quantile(0.75)
+    iqr_lines = q3_lines - q1_lines
+    lines_lower = q1_lines - 1.5 * iqr_lines
+    lines_upper = q3_lines + 1.5 * iqr_lines
+
+    q1_complexity = df["complexity"].quantile(0.25)
+    q3_complexity = df["complexity"].quantile(0.75)
+    iqr_complexity = q3_complexity - q1_complexity
+    complexity_lower = q1_complexity - 1.5 * iqr_complexity
+    complexity_upper = q3_complexity + 1.5 * iqr_complexity
+
+    df_filtered = df[
+        (df["lines_changed"] >= lines_lower) & (df["lines_changed"] <= lines_upper) &
+        (df["complexity"] >= complexity_lower) & (df["complexity"] <= complexity_upper)
+    ]
+
+    if df_filtered.empty or len(df_filtered) < 2:
+        df_filtered = df  # Fall back to original if filtering removes everything
+
+    corr = df_filtered["lines_changed"].corr(df_filtered["complexity"])
     if pd.isna(corr):
         corr = 0.0
     passed = abs(corr) < 0.3
     verdict = "PASS" if passed else "FAIL"
+
+    # Build PR examples for each data point (bucket by complexity and size ranges)
+    pr_examples = {}
+    for _, row in df_filtered.iterrows():
+        complexity_bucket = int(row["complexity"])
+        size_bucket = int(row["lines_changed"] // 100) * 100  # Bucket by 100s
+        key = f"{complexity_bucket}_{size_bucket}"
+
+        if key not in pr_examples:
+            pr_examples[key] = []
+
+        pr_url = row.get("pr_url", "")
+        explanation = row.get("explanation", "")
+        if pd.isna(explanation):
+            explanation = ""
+        else:
+            explanation = str(explanation).strip()
+
+        pr_title_val = row.get("pr_title", "")
+        if pd.isna(pr_title_val):
+            pr_title_val = ""
+        else:
+            pr_title_val = str(pr_title_val).strip()
+
+        if explanation:
+            title = explanation
+        elif pr_title_val:
+            title = pr_title_val
+        else:
+            title = _pr_title_from_url(pr_url) if pr_url else "Unknown PR"
+
+        pr_examples[key].append({
+            "title": title,
+            "url": pr_url,
+            "complexity": float(row.get("complexity", 0) or 0),
+            "lines_changed": int(row.get("lines_changed", 0) or 0),
+        })
+
     charts.append({
         "id": "10",
         "type": "scatter",
         "title": f"PR Size vs Complexity — {verdict} (r={corr:.2f})",
         "subtitle": "Lines changed vs complexity score",
-        "data": [[float(r["lines_changed"]), float(r["complexity"])] for _, r in df.iterrows()],
+        "data": [[float(r["lines_changed"]), float(r["complexity"])] for _, r in df_filtered.iterrows()],
         "xAxisName": "Lines Changed",
         "yAxisName": "Complexity",
+        "_pr_examples": pr_examples,  # Add PR examples for modal
     })
 
     # 11: PR count vs avg complexity (scatter with labels)
@@ -540,85 +606,6 @@ def _extract_fairness(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "xAxisName": "PR Count",
                 "yAxisName": "Avg Complexity",
             })
-
-    return charts
-
-
-def _extract_advanced(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    charts = []
-    df = _ensure_date(df)
-    if df.empty:
-        return charts
-
-    df = df.copy()
-    df["week"] = pd.to_datetime(df["date"], format="mixed", utc=False, errors="coerce").dt.to_period("W").dt.start_time
-
-    # 21: Developer line velocity (multi-line)
-    dev_col = "developer" if "developer" in df.columns else "author"
-    df["developer"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").astype(str)
-    tdf = df[df["developer"] != ""]
-    if not tdf.empty:
-        weekly = tdf.groupby(["week", "developer"])["complexity"].sum().unstack(fill_value=0)
-        weekly = weekly.reindex(weekly.sum().sort_values(ascending=False).index, axis=1)
-        if not weekly.empty:
-            weeks = [d.strftime("%Y-%m-%d") for d in weekly.index]
-            mapping = load_team_mapping()
-            series = [
-                {
-                    "name": c,
-                    "data": weekly[c].tolist(),
-                    "team": mapping.get(c, ""),
-                }
-                for c in weekly.columns
-            ]
-            charts.append({
-                "id": "21",
-                "type": "multiLine",
-                "title": "Developer Velocity by Week",
-                "subtitle": "Complexity per developer per week",
-                "x": weeks,
-                "series": series,
-                "hasPicker": True,
-            })
-
-    # 15: Complexity trend by team (multi-line)
-    df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
-    tdf = df[df["team"] != "Unknown"]
-    if not tdf.empty:
-        all_weeks = sorted(tdf["week"].unique())
-        x_labels = [d.strftime("%Y-%m-%d") for d in all_weeks]
-        series_list = []
-        for team in tdf["team"].unique():
-            team_weekly = tdf[tdf["team"] == team].groupby("week")["complexity"].median()
-            rolling = team_weekly.rolling(4, min_periods=1).mean()
-            aligned = rolling.reindex(all_weeks).tolist()
-            if any(pd.notna(v) for v in aligned):
-                series_list.append({"name": team, "data": [None if pd.isna(v) else float(v) for v in aligned]})
-        if series_list:
-            charts.append({
-                "id": "15",
-                "type": "multiLine",
-            "title": "Velocity Trend by Team (Rolling 4w)",
-            "subtitle": "Smoothed median complexity per team",
-                "x": x_labels,
-                "series": series_list,
-            })
-
-    # 16: Cumulative complexity by week (area/line)
-    df_cum = df.copy()
-    df_cum["week"] = pd.to_datetime(df_cum["date"], format="mixed", utc=False, errors="coerce").dt.to_period("W").dt.start_time
-    weekly_sum = df_cum.groupby("week")["complexity"].sum().sort_index()
-    cumulative = weekly_sum.cumsum()
-    if not cumulative.empty:
-        weeks = [d.strftime("%Y-%m-%d") for d in cumulative.index]
-        charts.append({
-            "id": "16",
-            "type": "area",
-            "title": "Cumulative Velocity Over Time",
-            "subtitle": "Running total of complexity (by week)",
-            "x": weeks,
-            "y": cumulative.tolist(),
-        })
 
     return charts
 
@@ -789,6 +776,47 @@ def _extract_leaderboard(df: pd.DataFrame) -> Dict[str, Any]:
     return result
 
 
+def _extract_hero_stats(df: pd.DataFrame) -> Dict[str, Any]:
+    """Extract hero dashboard stats for Overview tab."""
+    df = _ensure_date(df)
+    if df.empty:
+        return {
+            "velocity_per_capita": 0,
+            "active_developers": 0,
+            "total_prs": 0,
+            "avg_complexity": 0,
+        }
+
+    # Calculate per-capita velocity
+    df["week"] = pd.to_datetime(df["date"]).dt.to_period("W").dt.start_time
+    weekly = df.groupby("week")["complexity"].sum()
+    weeks = sorted([w.date() for w in weekly.index])
+    headcounts_dict = get_weekly_headcounts(weeks)
+    all_hc = headcounts_dict.get("All Teams", [])
+    per_capita = []
+    for i, (week, total_cx) in enumerate(weekly.items()):
+        hc = all_hc[i] if i < len(all_hc) else 0
+        if hc > 0:
+            per_capita.append(total_cx / hc)
+    velocity = round(np.mean(per_capita), 1) if per_capita else 0
+
+    # Active developers (unique in last 30 days)
+    last_30d = df[df["date"] >= (pd.Timestamp.now() - pd.Timedelta(days=30))]
+    dev_col = "developer" if "developer" in df.columns else "author"
+    active_devs = last_30d[dev_col].nunique() if not last_30d.empty else 0
+
+    # Total PRs and avg complexity
+    total_prs = len(df)
+    avg_cx = round(df["complexity"].mean(), 1) if "complexity" in df.columns else 0
+
+    return {
+        "velocity_per_capita": velocity,
+        "active_developers": active_devs,
+        "total_prs": total_prs,
+        "avg_complexity": avg_cx,
+    }
+
+
 def build_all_chart_data(df: pd.DataFrame) -> Dict[str, Any]:
     """Build chart data for all tabs. Returns {tab: [chart_data, ...]}."""
     # Ensure numeric and date columns are properly typed regardless of how the df was loaded
@@ -805,9 +833,9 @@ def build_all_chart_data(df: pd.DataFrame) -> Dict[str, Any]:
         "team": _extract_team(df),
         "risk": _extract_risk(df),
         "fairness": _extract_fairness(df),
-        "advanced": _extract_advanced(df),
         "features": features_data.get("charts", []),
         "_features_rows": features_data.get("rows", []),
         "leaderboard": _extract_leaderboard(df),
         "_team_dev_prs": _build_team_dev_prs(df),
+        "_hero_stats": _extract_hero_stats(df),
     }
