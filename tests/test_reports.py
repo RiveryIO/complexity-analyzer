@@ -138,12 +138,38 @@ def test_extract_leaderboard_groups_by_approver():
     recent = (today - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
     old = (today - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    df = pd.DataFrame([
-        {"pr_url": "https://github.com/o/r/pull/1", "complexity": 3, "approved_by": "alice", "date": recent, "merged_at": recent},
-        {"pr_url": "https://github.com/o/r/pull/2", "complexity": 5, "approved_by": "alice", "date": recent, "merged_at": recent},
-        {"pr_url": "https://github.com/o/r/pull/3", "complexity": 4, "approved_by": "bob",   "date": recent, "merged_at": recent},
-        {"pr_url": "https://github.com/o/r/pull/4", "complexity": 2, "approved_by": "alice", "date": old,    "merged_at": old},
-    ])
+    df = pd.DataFrame(
+        [
+            {
+                "pr_url": "https://github.com/o/r/pull/1",
+                "complexity": 3,
+                "approved_by": "alice",
+                "date": recent,
+                "merged_at": recent,
+            },
+            {
+                "pr_url": "https://github.com/o/r/pull/2",
+                "complexity": 5,
+                "approved_by": "alice",
+                "date": recent,
+                "merged_at": recent,
+            },
+            {
+                "pr_url": "https://github.com/o/r/pull/3",
+                "complexity": 4,
+                "approved_by": "bob",
+                "date": recent,
+                "merged_at": recent,
+            },
+            {
+                "pr_url": "https://github.com/o/r/pull/4",
+                "complexity": 2,
+                "approved_by": "alice",
+                "date": old,
+                "merged_at": old,
+            },
+        ]
+    )
 
     result = _extract_leaderboard(df)
 
@@ -163,17 +189,32 @@ def test_extract_leaderboard_groups_by_approver():
 
 
 def test_extract_leaderboard_no_approved_by_column():
-    df = pd.DataFrame([
-        {"pr_url": "https://github.com/o/r/pull/1", "complexity": 3, "date": "2026-03-10", "merged_at": "2026-03-10T10:00:00Z"},
-    ])
+    df = pd.DataFrame(
+        [
+            {
+                "pr_url": "https://github.com/o/r/pull/1",
+                "complexity": 3,
+                "date": "2026-03-10",
+                "merged_at": "2026-03-10T10:00:00Z",
+            },
+        ]
+    )
     result = _extract_leaderboard(df)
     assert result == {"30d": [], "90d": [], "all": []}
 
 
 def test_extract_leaderboard_empty_approved_by():
-    df = pd.DataFrame([
-        {"pr_url": "https://github.com/o/r/pull/1", "complexity": 3, "approved_by": "", "date": "2026-03-10", "merged_at": "2026-03-10T10:00:00Z"},
-    ])
+    df = pd.DataFrame(
+        [
+            {
+                "pr_url": "https://github.com/o/r/pull/1",
+                "complexity": 3,
+                "approved_by": "",
+                "date": "2026-03-10",
+                "merged_at": "2026-03-10T10:00:00Z",
+            },
+        ]
+    )
     result = _extract_leaderboard(df)
     assert result["30d"] == []
     assert result["all"] == []

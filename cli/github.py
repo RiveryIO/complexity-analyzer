@@ -545,9 +545,7 @@ def fetch_first_approver(
             response.raise_for_status()
             reviews = response.json()
     except httpx.HTTPStatusError as exc:
-        raise GitHubAPIError(
-            exc.response.status_code, exc.response.text[:500], url
-        ) from exc
+        raise GitHubAPIError(exc.response.status_code, exc.response.text[:500], url) from exc
     except httpx.RequestError as exc:
         raise RuntimeError(f"Failed to fetch PR reviews: {exc}") from exc
 

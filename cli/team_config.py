@@ -210,7 +210,9 @@ def load_developer_tenure(
     base = cwd or Path.cwd()
     path = base / _TENURE_FILENAME
     if not path.exists():
-        logger.warning("%s not found – headcount will fall back to CSV-derived counts", _TENURE_FILENAME)
+        logger.warning(
+            "%s not found – headcount will fall back to CSV-derived counts", _TENURE_FILENAME
+        )
         return {}
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -307,8 +309,12 @@ def get_weekly_headcounts(
         result[t] = []
 
     for w in weeks:
-        result["All Teams"].append(get_active_headcount(w, team=None, tenure=tenure, team_mapping=team_mapping))
+        result["All Teams"].append(
+            get_active_headcount(w, team=None, tenure=tenure, team_mapping=team_mapping)
+        )
         for t in teams:
-            result[t].append(get_active_headcount(w, team=t, tenure=tenure, team_mapping=team_mapping))
+            result[t].append(
+                get_active_headcount(w, team=t, tenure=tenure, team_mapping=team_mapping)
+            )
 
     return result

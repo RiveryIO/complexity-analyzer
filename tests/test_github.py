@@ -510,9 +510,13 @@ class TestFetchPrDiff406Fallback:
 def test_fetch_first_approver_returns_first_approved(mock_client_class):
     """Returns login of the first APPROVED review sorted by submitted_at."""
     reviews = [
-        {"state": "COMMENTED", "submitted_at": "2026-03-01T10:00:00Z", "user": {"login": "charlie"}},
-        {"state": "APPROVED",  "submitted_at": "2026-03-02T10:00:00Z", "user": {"login": "alice"}},
-        {"state": "APPROVED",  "submitted_at": "2026-03-03T10:00:00Z", "user": {"login": "bob"}},
+        {
+            "state": "COMMENTED",
+            "submitted_at": "2026-03-01T10:00:00Z",
+            "user": {"login": "charlie"},
+        },
+        {"state": "APPROVED", "submitted_at": "2026-03-02T10:00:00Z", "user": {"login": "alice"}},
+        {"state": "APPROVED", "submitted_at": "2026-03-03T10:00:00Z", "user": {"login": "bob"}},
     ]
     mock_response = Mock()
     mock_response.status_code = 200
@@ -535,7 +539,11 @@ def test_fetch_first_approver_no_approvals_returns_empty(mock_client_class):
     mock_response = Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = [
-        {"state": "COMMENTED", "submitted_at": "2026-03-01T10:00:00Z", "user": {"login": "charlie"}},
+        {
+            "state": "COMMENTED",
+            "submitted_at": "2026-03-01T10:00:00Z",
+            "user": {"login": "charlie"},
+        },
     ]
     mock_response.raise_for_status = Mock()
 
@@ -569,6 +577,7 @@ def test_fetch_first_approver_404_returns_empty(mock_client_class):
 def test_fetch_first_approver_500_raises(mock_client_class):
     """Non-404 HTTP errors raise GitHubAPIError."""
     from cli.github import GitHubAPIError
+
     mock_response = Mock()
     mock_response.status_code = 500
     mock_response.text = "Internal Server Error"
