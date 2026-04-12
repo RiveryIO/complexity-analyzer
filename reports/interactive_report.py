@@ -170,7 +170,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       line-height: 1.5;
     }}
     .page {{ max-width: 1440px; margin: 0 auto; padding: 3rem 3rem 5rem; }}
-    header {{ margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border-light); }}
+    header {{ margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-light); }}
     .header-row {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; }}
     .header-text {{ flex: 1; }}
     h1 {{ font-family: 'Syne', sans-serif; font-size: 2.25rem; font-weight: 700; letter-spacing: -0.04em; margin: 0 0 0.5rem; color: var(--text); }}
