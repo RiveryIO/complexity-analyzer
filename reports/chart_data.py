@@ -27,6 +27,78 @@ def _gini(x: pd.Series) -> float:
     return (2 * np.sum((np.arange(1, n + 1)) * x) - (n + 1) * np.sum(x)) / (n * np.sum(x)) if np.sum(x) > 0 else 0
 
 
+def _pr_title_from_url(url: str) -> str:
+    """Derive a short display title from a PR URL."""
+    try:
+        # GitHub: https://github.com/owner/repo/pull/123
+        # Bitbucket: https://bitbucket.org/ws/repo/pull-requests/123
+        parts = url.rstrip("/").split("/")
+        number = parts[-1]
+        repo = parts[-3]
+        return f"{repo} #{number}"
+    except (IndexError, ValueError):
+        return url
+
+
+def _build_team_dev_prs(df: pd.DataFrame) -> Dict[str, Any]:
+    """Build lookup: team -> developer -> week_start_str -> list[pr_dict].
+
+    Used by the JS drilldown modal when a user clicks a dot on the
+    devVelocityMultiLine chart. Only includes developers with known team
+    assignments; Bots excluded.
+    """
+    mapping = load_team_mapping()
+    if not mapping:
+        return {}
+
+    df = _ensure_date(df.copy())
+    if df.empty:
+        return {}
+
+    dev_col = "developer" if "developer" in df.columns else "author"
+    df["_dev"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").astype(str)
+    df["_team"] = df["_dev"].map(lambda d: mapping.get(d, "") if d else "")
+    df = df[(df["_team"] != "") & (df["_dev"] != "") & (df["_team"] != "Bots")]
+    if df.empty:
+        return {}
+
+    df["_week"] = (
+        pd.to_datetime(df["date"], format="mixed", utc=False, errors="coerce")
+        .dt.to_period("W")
+        .dt.start_time
+    )
+
+    result: Dict[str, Any] = {}
+    for _, row in df.iterrows():
+        team = row["_team"]
+        dev = row["_dev"]
+        week = row["_week"]
+        if pd.isna(week):
+            continue
+        week_key = week.strftime("%Y-%m-%d")
+
+        pr_url = str(row.get("pr_url", "") or "")
+        merged_at = row.get("merged_at", "")
+        if pd.notna(merged_at):
+            try:
+                merged_at = pd.to_datetime(merged_at).strftime("%Y-%m-%d")
+            except Exception:
+                merged_at = str(merged_at)
+        else:
+            merged_at = ""
+
+        pr_dict = {
+            "title": _pr_title_from_url(pr_url),
+            "url": pr_url,
+            "complexity": float(row.get("complexity", 0) or 0),
+            "merged_at": merged_at,
+        }
+
+        result.setdefault(team, {}).setdefault(dev, {}).setdefault(week_key, []).append(pr_dict)
+
+    return result
+
+
 def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
     charts = []
     df = _ensure_date(df)
