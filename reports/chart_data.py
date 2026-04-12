@@ -87,9 +87,29 @@ def _build_team_dev_prs(df: pd.DataFrame) -> Dict[str, Any]:
         else:
             merged_at = ""
 
-        pr_title = str(row.get("pr_title", "") or "").strip()
+        # Use explanation column as title, fall back to pr_title or URL-based title
+        explanation = row.get("explanation", "")
+        # Handle NaN/None values from pandas
+        if pd.isna(explanation):
+            explanation = ""
+        else:
+            explanation = str(explanation).strip()
+
+        pr_title = row.get("pr_title", "")
+        if pd.isna(pr_title):
+            pr_title = ""
+        else:
+            pr_title = str(pr_title).strip()
+
+        if explanation:
+            title = explanation
+        elif pr_title:
+            title = pr_title
+        else:
+            title = _pr_title_from_url(pr_url)
+
         pr_dict = {
-            "title": pr_title if pr_title else _pr_title_from_url(pr_url),
+            "title": title,
             "url": pr_url,
             "complexity": float(row.get("complexity", 0) or 0),
             "merged_at": merged_at,
@@ -427,22 +447,6 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                     "series": series_30,
                 })
 
-        # 05: Stacked bar
-        pivot = tdf.pivot_table(index="week", columns="developer", values="complexity", aggfunc="sum", fill_value=0)
-        pivot = pivot.reindex(pivot.sum().sort_values(ascending=False).index, axis=1)
-        pivot = pivot.loc[(pivot != 0).any(axis=1)]
-        if not pivot.empty and pivot.sum().sum() > 0:
-            weeks = [d.strftime("%Y-%m-%d") for d in pivot.index]
-            series = [{"name": c, "data": pivot[c].tolist()} for c in pivot.columns]
-            charts.append({
-                "id": f"05-{team}",
-                "type": "stackedBar",
-                "title": f"Developer Velocity — {team}",
-                "subtitle": "Complexity per week",
-                "_subtab": team,
-                "x": weeks,
-                "series": series,
-            })
         # 06: Scatter
         agg = tdf.groupby("developer").agg(pr_count=("pr_url", "count"), total_complexity=("complexity", "sum"))
         if len(agg) >= 2:

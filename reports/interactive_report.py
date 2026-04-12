@@ -1922,7 +1922,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           ? `<a href="${{pr.url}}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.85rem">\u2192 Open PR</a>`
           : '\u2014';
         tableHtml += `<tr>
-          <td class="cell-name"><span class="name-text" title="${{title}}">${{displayTitle}}</span></td>
+          <td class="cell-name" title="${{title}}"><span class="name-text">${{displayTitle}}</span></td>
           <td>${{badge}}</td>
           <td style="white-space:nowrap;font-size:0.85rem">${{mergedDate}}</td>
           <td>${{link}}</td>
