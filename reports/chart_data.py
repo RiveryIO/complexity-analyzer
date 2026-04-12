@@ -384,6 +384,48 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "y": per_capita,
             })
 
+        # 30: Developer velocity multi-line (per-dev complexity, clickable dots)
+        if not tdf.empty:
+            dev_week_cx = tdf.pivot_table(
+                index="week",
+                columns="developer",
+                values="complexity",
+                aggfunc="sum",
+                fill_value=0,
+            )
+            dev_week_cnt = tdf.pivot_table(
+                index="week",
+                columns="developer",
+                values="pr_url",
+                aggfunc="count",
+                fill_value=0,
+            )
+            dev_week_cx = dev_week_cx.reindex(all_week_dates, fill_value=0)
+            dev_week_cnt = dev_week_cnt.reindex(all_week_dates, fill_value=0)
+            week_labels_30 = [w.strftime("%Y-%m-%d") for w in all_week_dates]
+            series_30 = []
+            for dev in dev_week_cx.columns:
+                cx_vals = [round(float(v), 2) for v in dev_week_cx[dev].tolist()]
+                if dev in dev_week_cnt.columns:
+                    cnt_vals = [int(v) for v in dev_week_cnt[dev].tolist()]
+                else:
+                    cnt_vals = [0] * len(all_week_dates)
+                series_30.append({
+                    "name": dev,
+                    "data": cx_vals,
+                    "prCounts": cnt_vals,
+                })
+            if series_30:
+                charts.append({
+                    "id": f"30-{team}",
+                    "type": "devVelocityMultiLine",
+                    "title": f"Developer Velocity \u2014 {team}",
+                    "subtitle": "Weekly complexity per developer \u00b7 click a dot to see PRs",
+                    "_subtab": team,
+                    "x": week_labels_30,
+                    "series": series_30,
+                })
+
         # 05: Stacked bar
         pivot = tdf.pivot_table(index="week", columns="developer", values="complexity", aggfunc="sum", fill_value=0)
         pivot = pivot.reindex(pivot.sum().sort_values(ascending=False).index, axis=1)
