@@ -1,7 +1,6 @@
 """Unit tests for chart_data module."""
 
 import pandas as pd
-import pytest
 from unittest.mock import patch
 
 from reports.chart_data import _build_team_dev_prs, build_all_chart_data
@@ -11,41 +10,43 @@ TEAM_MAPPING = {"alice": "Alpha", "bob": "Alpha", "carol": "Beta"}
 
 
 def _make_df():
-    return pd.DataFrame([
-        {
-            "pr_url": "https://github.com/org/repo/pull/1",
-            "complexity": 3.0,
-            "developer": "alice",
-            "merged_at": "2026-01-06",
-            "date": "2026-01-06",
-            "team": "Alpha",
-            "created_at": "2026-01-05",
-            "lines_added": 10,
-            "lines_deleted": 5,
-        },
-        {
-            "pr_url": "https://github.com/org/repo/pull/2",
-            "complexity": 5.0,
-            "developer": "alice",
-            "merged_at": "2026-01-07",
-            "date": "2026-01-07",
-            "team": "Alpha",
-            "created_at": "2026-01-06",
-            "lines_added": 20,
-            "lines_deleted": 0,
-        },
-        {
-            "pr_url": "https://github.com/org/repo/pull/3",
-            "complexity": 8.0,
-            "developer": "bob",
-            "merged_at": "2026-01-13",
-            "date": "2026-01-13",
-            "team": "Alpha",
-            "created_at": "2026-01-12",
-            "lines_added": 30,
-            "lines_deleted": 10,
-        },
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "pr_url": "https://github.com/org/repo/pull/1",
+                "complexity": 3.0,
+                "developer": "alice",
+                "merged_at": "2026-01-06",
+                "date": "2026-01-06",
+                "team": "Alpha",
+                "created_at": "2026-01-05",
+                "lines_added": 10,
+                "lines_deleted": 5,
+            },
+            {
+                "pr_url": "https://github.com/org/repo/pull/2",
+                "complexity": 5.0,
+                "developer": "alice",
+                "merged_at": "2026-01-07",
+                "date": "2026-01-07",
+                "team": "Alpha",
+                "created_at": "2026-01-06",
+                "lines_added": 20,
+                "lines_deleted": 0,
+            },
+            {
+                "pr_url": "https://github.com/org/repo/pull/3",
+                "complexity": 8.0,
+                "developer": "bob",
+                "merged_at": "2026-01-13",
+                "date": "2026-01-13",
+                "team": "Alpha",
+                "created_at": "2026-01-12",
+                "lines_added": 30,
+                "lines_deleted": 10,
+            },
+        ]
+    )
 
 
 @patch("reports.chart_data.load_team_mapping", return_value=TEAM_MAPPING)
@@ -80,7 +81,10 @@ def test_build_team_dev_prs_pr_fields(mock_mapping):
     all_prs = [pr for prs in alice_weeks.values() for pr in prs]
     assert len(all_prs) == 2
     pr1 = all_prs[0]
-    assert pr1["url"] == "https://github.com/org/repo/pull/1" or pr1["url"] == "https://github.com/org/repo/pull/2"
+    assert (
+        pr1["url"] == "https://github.com/org/repo/pull/1"
+        or pr1["url"] == "https://github.com/org/repo/pull/2"
+    )
     assert isinstance(pr1["complexity"], float)
     assert isinstance(pr1["merged_at"], str)
     # Title is derived as "repo #N"
@@ -97,6 +101,7 @@ def test_build_team_dev_prs_week_key_matches_monday(mock_mapping):
         for dev, weeks in devs.items():
             for week_key in weeks:
                 import datetime
+
                 d = datetime.date.fromisoformat(week_key)
                 # Must be a Monday (weekday() == 0)
                 assert d.weekday() == 0, f"{week_key} is not a Monday"

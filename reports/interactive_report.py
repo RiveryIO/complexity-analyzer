@@ -1416,6 +1416,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     ];
 
     const featuresRows = chartData['_features_rows'] || [];
+    const teamDevPrs = chartData['_team_dev_prs'] || {{}};
 
     tabOrder.forEach((key, i) => {{
       const panel = document.createElement('div');
@@ -1778,6 +1779,15 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
                 openDrilldown(month, c, seriesName);
               }});
             }}
+            if (c.type === 'devVelocityMultiLine') {{
+              ch.on('click', function(params) {{
+                const week = params.name;
+                const developer = params.seriesName;
+                const team = c._subtab;
+                const prs = ((teamDevPrs[team] || {{}})[developer] || {{}})[week] || [];
+                if (prs.length > 0) openDevPrModal(developer, week, prs);
+              }});
+            }}
           }}
         }}
       }});
@@ -1872,6 +1882,52 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     const ddTitle = document.getElementById('dd-title');
     const ddBody = document.getElementById('dd-body');
     const ddClose = document.getElementById('dd-close');
+
+    function openDevPrModal(developer, week, prs) {{
+      const weekDate = new Date(week + 'T00:00:00');
+      const weekFmt = weekDate.toLocaleDateString('en-US', {{month: 'short', day: 'numeric', year: 'numeric'}});
+      const totalComplexity = prs.reduce((sum, pr) => sum + (pr.complexity || 0), 0).toFixed(1);
+      ddTitle.innerHTML = `${{developer}} \u2014 week of ${{weekFmt}}<span class="dd-count">${{prs.length}} PR${{prs.length !== 1 ? 's' : ''}} \u00b7 complexity ${{totalComplexity}}</span>`;
+
+      const complexityColor = (v) => {{
+        if (v >= 8) return '#991b1b';
+        if (v >= 5) return '#92400e';
+        return '#065f46';
+      }};
+      const complexityBg = (v) => {{
+        if (v >= 8) return '#fee2e2';
+        if (v >= 5) return '#fef3c7';
+        return '#d1fae5';
+      }};
+
+      let tableHtml = `<table class="dd-table">
+        <thead><tr>
+          <th>PR</th><th>Complexity</th><th>Merged</th><th>Link</th>
+        </tr></thead><tbody>`;
+
+      prs.forEach(pr => {{
+        const title = pr.title || pr.url || '\u2014';
+        const displayTitle = title.length > 60 ? title.slice(0, 60) + '\u2026' : title;
+        const mergedDate = pr.merged_at
+          ? new Date(pr.merged_at + 'T00:00:00').toLocaleDateString('en-US', {{month: 'short', day: 'numeric', year: 'numeric'}})
+          : '\u2014';
+        const cx = pr.complexity || 0;
+        const badge = `<span style="display:inline-block;font-size:0.7rem;font-family:'Syne',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:${{complexityBg(cx)}};color:${{complexityColor(cx)}}">${{cx}}</span>`;
+        const link = pr.url
+          ? `<a href="${{pr.url}}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.85rem">\u2192 Open PR</a>`
+          : '\u2014';
+        tableHtml += `<tr>
+          <td class="cell-name"><span class="name-text" title="${{title}}">${{displayTitle}}</span></td>
+          <td>${{badge}}</td>
+          <td style="white-space:nowrap;font-size:0.85rem">${{mergedDate}}</td>
+          <td>${{link}}</td>
+        </tr>`;
+      }});
+
+      tableHtml += '</tbody></table>';
+      ddBody.innerHTML = tableHtml;
+      ddOverlay.classList.add('open');
+    }}
 
     function openDrilldown(month, chartConfig, seriesName) {{
       let filtered = featuresRows.filter(r => r.month === month && r.category !== 'bug_fix');
