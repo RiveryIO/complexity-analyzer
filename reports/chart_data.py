@@ -804,4 +804,5 @@ def build_all_chart_data(df: pd.DataFrame) -> Dict[str, Any]:
         "features": features_data.get("charts", []),
         "_features_rows": features_data.get("rows", []),
         "leaderboard": _extract_leaderboard(df),
+        "_team_dev_prs": _build_team_dev_prs(df),
     }
