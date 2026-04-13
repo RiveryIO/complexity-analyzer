@@ -27,8 +27,13 @@ CSV_FILE="complexity-report.csv"
 REPOS_FILE="repos.txt"
 LOG_FILE="logs/sync-$(date +%Y%m%d-%H%M%S).log"
 
-# Bitbucket project spec: workspace/{project-uuid}
-BB_PROJECT="${BB_PROJECT:-boomii/{4f41797b-d5bb-4bd8-9f80-ede75279ffe0}}"
+# Bitbucket project specs: workspace/{project-uuid}
+# Knowledge Hub project
+BB_PROJECT_KH="${BB_PROJECT_KH:-boomii/{4f41797b-d5bb-4bd8-9f80-ede75279ffe0}}"
+# Experimental project
+BB_PROJECT_EXP="${BB_PROJECT_EXP:-boomii/{8d2bca4c-5e79-4ea4-969c-9c12a06141e2}}"
+# Rivery project (main Rivery repos)
+BB_PROJECT_RIVERY="${BB_PROJECT_RIVERY:-boomii/{7219bb6e-d4d0-4031-9dbb-9c855c950662}}"
 
 DAYS=14
 WORKERS=3
@@ -93,12 +98,29 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     fi
     if [[ "${SKIP_BB:-0}" != "1" ]]; then
         echo "--- Bitbucket (dry run) ---" | tee -a "$LOG_FILE"
+        echo "  Knowledge Hub project..." | tee -a "$LOG_FILE"
         complexity-cli batch-analyze \
-            --bb-project "$BB_PROJECT" \
+            --bb-project "$BB_PROJECT_KH" \
             --days "$DAYS" \
             --output "$CSV_FILE" \
             --fetch-only \
-            --cache "cache/sync-dryrun-bb-$(date +%Y%m%d).txt" \
+            --cache "cache/sync-dryrun-bb-kh-$(date +%Y%m%d).txt" \
+            2>&1 | tee -a "$LOG_FILE"
+        echo "  Experimental project..." | tee -a "$LOG_FILE"
+        complexity-cli batch-analyze \
+            --bb-project "$BB_PROJECT_EXP" \
+            --days "$DAYS" \
+            --output "$CSV_FILE" \
+            --fetch-only \
+            --cache "cache/sync-dryrun-bb-exp-$(date +%Y%m%d).txt" \
+            2>&1 | tee -a "$LOG_FILE"
+        echo "  Rivery project..." | tee -a "$LOG_FILE"
+        complexity-cli batch-analyze \
+            --bb-project "$BB_PROJECT_RIVERY" \
+            --days "$DAYS" \
+            --output "$CSV_FILE" \
+            --fetch-only \
+            --cache "cache/sync-dryrun-bb-rivery-$(date +%Y%m%d).txt" \
             2>&1 | tee -a "$LOG_FILE"
     fi
     echo "Done (dry run). Check the cache files for the PR lists." | tee -a "$LOG_FILE"
@@ -125,16 +147,48 @@ fi
 BB_FOUND=0
 if [[ "${SKIP_BB:-0}" != "1" ]]; then
     echo "--- Pass 2: Bitbucket ---" | tee -a "$LOG_FILE"
-    BB_OUTPUT=$(complexity-cli batch-analyze \
-        --bb-project "$BB_PROJECT" \
+
+    # Pass 2a: Knowledge Hub project
+    echo "  Scanning Knowledge Hub project..." | tee -a "$LOG_FILE"
+    BB_OUTPUT_KH=$(complexity-cli batch-analyze \
+        --bb-project "$BB_PROJECT_KH" \
         --days "$DAYS" \
         --output "$CSV_FILE" \
         --label \
         --workers "$WORKERS" \
         --resume \
         2>&1) || true
-    echo "$BB_OUTPUT" | tee -a "$LOG_FILE"
-    BB_FOUND=$(echo "$BB_OUTPUT" | grep -oE 'Total: [0-9]+ merged PRs' | head -1 | grep -oE '[0-9]+' | head -1 || echo "0")
+    echo "$BB_OUTPUT_KH" | tee -a "$LOG_FILE"
+    BB_FOUND_KH=$(echo "$BB_OUTPUT_KH" | grep -oE 'Total: [0-9]+ merged PRs' | head -1 | grep -oE '[0-9]+' | head -1 || echo "0")
+
+    # Pass 2b: Experimental project
+    echo "  Scanning Experimental project..." | tee -a "$LOG_FILE"
+    BB_OUTPUT_EXP=$(complexity-cli batch-analyze \
+        --bb-project "$BB_PROJECT_EXP" \
+        --days "$DAYS" \
+        --output "$CSV_FILE" \
+        --label \
+        --workers "$WORKERS" \
+        --resume \
+        2>&1) || true
+    echo "$BB_OUTPUT_EXP" | tee -a "$LOG_FILE"
+    BB_FOUND_EXP=$(echo "$BB_OUTPUT_EXP" | grep -oE 'Total: [0-9]+ merged PRs' | head -1 | grep -oE '[0-9]+' | head -1 || echo "0")
+
+    # Pass 2c: Rivery project
+    echo "  Scanning Rivery project..." | tee -a "$LOG_FILE"
+    BB_OUTPUT_RIVERY=$(complexity-cli batch-analyze \
+        --bb-project "$BB_PROJECT_RIVERY" \
+        --days "$DAYS" \
+        --output "$CSV_FILE" \
+        --label \
+        --workers "$WORKERS" \
+        --resume \
+        2>&1) || true
+    echo "$BB_OUTPUT_RIVERY" | tee -a "$LOG_FILE"
+    BB_FOUND_RIVERY=$(echo "$BB_OUTPUT_RIVERY" | grep -oE 'Total: [0-9]+ merged PRs' | head -1 | grep -oE '[0-9]+' | head -1 || echo "0")
+
+    BB_FOUND=$(( BB_FOUND_KH + BB_FOUND_EXP + BB_FOUND_RIVERY ))
+    echo "  Total Bitbucket PRs found: $BB_FOUND (KH: $BB_FOUND_KH, Exp: $BB_FOUND_EXP, Rivery: $BB_FOUND_RIVERY)" | tee -a "$LOG_FILE"
 fi
 
 FOUND=$(( GH_FOUND + BB_FOUND ))

@@ -100,10 +100,10 @@ def _load_teams_txt(path: Path) -> Optional[Dict[str, str]]:
 
 def load_team_mapping(cwd: Optional[Path] = None) -> Dict[str, str]:
     """
-    Load developer-to-team mapping from a config file.
+    Load developer-to-team mapping from config files.
 
-    Searches (in order): github-teams.cfg, github-teams.yaml,
-    teams.yaml, teams.yml, teams.cfg, teams.txt.
+    Searches and merges (in order): github-teams.cfg, bitbucket-teams.cfg,
+    github-teams.yaml, teams.yaml, teams.yml, teams.cfg, teams.txt.
 
     Format: [TeamName] followed by developers (same line or subsequent lines until next [Team]):
         [Platform]
@@ -115,17 +115,21 @@ def load_team_mapping(cwd: Optional[Path] = None) -> Dict[str, str]:
     Or YAML: TeamName: [dev1, dev2, ...]
 
     Returns:
-        Dict mapping "developer" -> "Team Name"
+        Dict mapping "developer" -> "Team Name" (merged from all found files)
     """
     base = cwd or Path.cwd()
     candidates = (
         "github-teams.cfg",
+        "bitbucket-teams.cfg",
         "github-teams.yaml",
         "teams.yaml",
         "teams.yml",
         "teams.cfg",
         "teams.txt",
     )
+
+    # Merge all found team mappings
+    merged: Dict[str, str] = {}
     for name in candidates:
         path = base / name
         if path.suffix in (".yaml", ".yml"):
@@ -135,17 +139,19 @@ def load_team_mapping(cwd: Optional[Path] = None) -> Dict[str, str]:
         else:
             continue
         if result:
-            return result
-    return {}
+            merged.update(result)
+            logger.debug("Loaded %d developers from %s", len(result), name)
+
+    return merged
 
 
 def get_team_for_developer(developer: str, mapping: Optional[Dict[str, str]] = None) -> str:
     """
-    Get team name for a developer (GitHub username).
+    Get team name for a developer (GitHub or Bitbucket username).
 
     Args:
-        developer: GitHub username
-        mapping: Optional pre-loaded mapping. If None, loads from teams.yaml/txt.
+        developer: Username from any platform (GitHub, Bitbucket, etc.)
+        mapping: Optional pre-loaded mapping. If None, loads from all team config files.
 
     Returns:
         Team name or empty string if no mapping
@@ -155,6 +161,33 @@ def get_team_for_developer(developer: str, mapping: Optional[Dict[str, str]] = N
     if mapping is None:
         mapping = load_team_mapping()
     return mapping.get(developer.strip(), "")
+
+
+def load_platform_team_mapping(
+    platform: str, cwd: Optional[Path] = None
+) -> Dict[str, str]:
+    """
+    Load team mapping for a specific platform.
+
+    Args:
+        platform: Platform name ('github' or 'bitbucket')
+        cwd: Working directory (defaults to current directory)
+
+    Returns:
+        Dict mapping "developer" -> "Team Name" for the specified platform
+    """
+    base = cwd or Path.cwd()
+    filename = f"{platform}-teams.cfg"
+    path = base / filename
+
+    if path.suffix in (".yaml", ".yml"):
+        result = _load_teams_yaml(path)
+    elif path.suffix in (".txt", ".cfg"):
+        result = _load_teams_txt(path)
+    else:
+        return {}
+
+    return result if result else {}
 
 
 def get_team_for_repo(owner: str, repo: str, mapping: Optional[Dict[str, str]] = None) -> str:

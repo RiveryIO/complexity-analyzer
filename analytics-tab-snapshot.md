@@ -1,0 +1,104 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - heading "Engineering Velocity" [level=1] [ref=e6]
+          - paragraph [ref=e7]: Rivery Data Integration engineering velocity
+        - generic [ref=e8]:
+          - img
+          - textbox "Filter charts by title..." [ref=e9]
+    - generic [ref=e10]:
+      - button "📊 Overview" [ref=e11] [cursor=pointer]
+      - button "🔍 Analytics" [active] [ref=e12] [cursor=pointer]
+      - button "👥 People" [ref=e13] [cursor=pointer]
+      - button "📋 Planning" [ref=e14] [cursor=pointer]
+    - generic [ref=e15]:
+      - button "Features" [ref=e294] [cursor=pointer]
+      - button "Risk" [ref=e295] [cursor=pointer]
+      - button "Fairness" [ref=e296] [cursor=pointer]
+    - generic [ref=e297]:
+      - generic [ref=e298]:
+        - generic [ref=e299]:
+          - generic [ref=e300]: "540"
+          - generic [ref=e301]: Total shipped
+        - generic [ref=e302]:
+          - generic [ref=e303]: "352"
+          - generic [ref=e304]: User-facing
+        - generic [ref=e305]:
+          - generic [ref=e306]: "444"
+          - generic [ref=e307]: New features
+        - generic [ref=e308]:
+          - generic [ref=e309]: "38"
+          - generic [ref=e310]: Improvements
+        - generic [ref=e311]:
+          - generic [ref=e312]: "898"
+          - generic [ref=e313]: Bug fixes
+        - generic [ref=e314]:
+          - generic [ref=e315]: "5"
+          - generic [ref=e316]: Teams
+      - generic [ref=e317]:
+        - generic [ref=e318]: ⚠️
+        - generic [ref=e319]:
+          - strong [ref=e320]: Alpha
+          - text: — Feature data is AI-classified and may contain inaccuracies. Please validate before drawing conclusions.
+      - generic [ref=e321]:
+        - generic [ref=e322]: "Jump to:"
+        - link "Features Released per Month..." [ref=e323] [cursor=pointer]:
+          - /url: "#anchor-features-0"
+        - link "Feature Categories per Month" [ref=e324] [cursor=pointer]:
+          - /url: "#anchor-features-1"
+        - link "Features Released per Month..." [ref=e325] [cursor=pointer]:
+          - /url: "#anchor-features-2"
+        - link "Features Released per Month..." [ref=e326] [cursor=pointer]:
+          - /url: "#anchor-features-3"
+        - link "Features Released per Month..." [ref=e327] [cursor=pointer]:
+          - /url: "#anchor-features-4"
+        - link "Features Released per Month..." [ref=e328] [cursor=pointer]:
+          - /url: "#anchor-features-5"
+        - link "Features Released per Month..." [ref=e329] [cursor=pointer]:
+          - /url: "#anchor-features-6"
+        - link "Average Lead Time per Month" [ref=e330] [cursor=pointer]:
+          - /url: "#anchor-features-7"
+      - generic [ref=e331]:
+        - generic [ref=e332] [cursor=pointer]:
+          - heading "Features Released per Month — All Teams" [level=3] [ref=e333]
+          - generic [ref=e334]: Click a bar to see the features for that month
+          - generic [ref=e338]: ▶ Click chart to view features
+        - generic [ref=e339] [cursor=pointer]:
+          - heading "Feature Categories per Month" [level=3] [ref=e340]
+          - generic [ref=e341]: Feature vs improvement vs tech_debt vs bug_fix
+          - generic [ref=e345]: ▶ Click chart to view features
+        - generic [ref=e346] [cursor=pointer]:
+          - heading "Features Released per Month — CDC" [level=3] [ref=e347]
+          - generic [ref=e348]: Click a bar to drill into CDC's features
+          - generic [ref=e352]: ▶ Click chart to view features
+        - generic [ref=e353] [cursor=pointer]:
+          - heading "Features Released per Month — Core" [level=3] [ref=e354]
+          - generic [ref=e355]: Click a bar to drill into Core's features
+          - generic [ref=e359]: ▶ Click chart to view features
+        - generic [ref=e360] [cursor=pointer]:
+          - heading "Features Released per Month — Devops" [level=3] [ref=e361]
+          - generic [ref=e362]: Click a bar to drill into Devops's features
+          - generic [ref=e366]: ▶ Click chart to view features
+        - generic [ref=e367] [cursor=pointer]:
+          - heading "Features Released per Month — FullStack" [level=3] [ref=e368]
+          - generic [ref=e369]: Click a bar to drill into FullStack's features
+          - generic [ref=e373]: ▶ Click chart to view features
+        - generic [ref=e374] [cursor=pointer]:
+          - heading "Features Released per Month — Ninja" [level=3] [ref=e375]
+          - generic [ref=e376]: Click a bar to drill into Ninja's features
+          - generic [ref=e380]: ▶ Click chart to view features
+        - generic [ref=e381]:
+          - heading "Average Lead Time per Month" [level=3] [ref=e382]
+          - generic [ref=e383]: Days from first ticket created to feature released
+  - generic:
+    - generic:
+      - generic:
+        - heading "Features" [level=2]
+        - button "×"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Developer PRs" [level=2]
+        - button "×"

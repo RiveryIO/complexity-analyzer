@@ -1,0 +1,10 @@
+boomii/kh-commons
+boomii/kh-kubernetes
+boomii/kh-retrieve-api
+boomii/kh-terraform
+boomii/kh-worker
+boomii/knowledge-hub-api
+boomii/knowledge-hub-frontend
+boomii/rivery-api-service
+boomii/rivery-dev-agent
+boomii/rivery-fire-service

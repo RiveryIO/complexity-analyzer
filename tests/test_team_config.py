@@ -106,14 +106,17 @@ dave
     assert mapping == expected
 
 
-def test_load_team_mapping_github_teams_cfg_takes_priority(tmp_path, monkeypatch):
-    """github-teams.cfg is loaded before teams.yaml."""
+def test_load_team_mapping_merges_multiple_files(tmp_path, monkeypatch):
+    """Test that multiple team config files are merged together."""
     (tmp_path / "github-teams.cfg").write_text("[Alpha] alice\n[Beta] bob")
     (tmp_path / "teams.yaml").write_text("[Gamma] charlie\n[Delta] dave")
     monkeypatch.chdir(tmp_path)
     mapping = load_team_mapping(tmp_path)
-    assert "alice" in mapping
-    assert "charlie" not in mapping
+    # All developers from all files should be present
+    assert mapping["alice"] == "Alpha"
+    assert mapping["bob"] == "Beta"
+    assert mapping["charlie"] == "Gamma"
+    assert mapping["dave"] == "Delta"
 
 
 def test_load_team_mapping_teams_cfg_multiline(tmp_path, monkeypatch):
@@ -175,3 +178,59 @@ def test_get_team_for_repo_deprecated_returns_empty():
     """get_team_for_repo is deprecated; always returns empty string."""
     assert get_team_for_repo("org", "repo") == ""
     assert get_team_for_repo("org", "repo", mapping={"x": "y"}) == ""
+
+
+def test_load_team_mapping_bitbucket_teams_cfg(tmp_path, monkeypatch):
+    """Test load_team_mapping from bitbucket-teams.cfg."""
+    teams_file = tmp_path / "bitbucket-teams.cfg"
+    teams_file.write_text(
+        """
+[Core]
+alice_bb
+bob_bb
+
+[Backend]
+charlie_bb
+dave_bb
+"""
+    )
+    monkeypatch.chdir(tmp_path)
+    mapping = load_team_mapping(tmp_path)
+    assert mapping == {
+        "alice_bb": "Core",
+        "bob_bb": "Core",
+        "charlie_bb": "Backend",
+        "dave_bb": "Backend",
+    }
+
+
+def test_load_team_mapping_merges_github_and_bitbucket(tmp_path, monkeypatch):
+    """Test that both github-teams.cfg and bitbucket-teams.cfg are merged."""
+    github_file = tmp_path / "github-teams.cfg"
+    github_file.write_text(
+        """
+[Core]
+alice
+bob
+"""
+    )
+    bitbucket_file = tmp_path / "bitbucket-teams.cfg"
+    bitbucket_file.write_text(
+        """
+[Core]
+alice_bb
+bob_bb
+
+[Backend]
+charlie_bb
+"""
+    )
+    monkeypatch.chdir(tmp_path)
+    mapping = load_team_mapping(tmp_path)
+    assert mapping == {
+        "alice": "Core",
+        "bob": "Core",
+        "alice_bb": "Core",
+        "bob_bb": "Core",
+        "charlie_bb": "Backend",
+    }

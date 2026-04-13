@@ -1,0 +1,190 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - heading "Engineering Velocity" [level=1] [ref=e6]
+          - paragraph [ref=e7]: Rivery Data Integration engineering velocity
+        - generic [ref=e8]:
+          - img
+          - textbox "Filter charts by title..." [ref=e9]
+    - generic [ref=e10]:
+      - button "📊 Overview" [ref=e11] [cursor=pointer]
+      - button "🔍 Analytics" [ref=e12] [cursor=pointer]
+      - button "👥 People" [active] [ref=e13] [cursor=pointer]
+      - button "📋 Planning" [ref=e14] [cursor=pointer]
+    - generic [ref=e15]:
+      - button "Engineers" [ref=e99] [cursor=pointer]
+      - button "Leaderboard" [ref=e100] [cursor=pointer]
+    - generic [ref=e102]:
+      - generic [ref=e103]:
+        - heading "Engineering Team Roster" [level=2] [ref=e104]
+        - paragraph [ref=e105]: Developer tenure, status, and leave data used for per-capita velocity calculations.
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - generic [ref=e108]: "36"
+          - generic [ref=e109]: Total
+        - generic [ref=e110]:
+          - generic [ref=e111]: "30"
+          - generic [ref=e112]: Active
+        - generic [ref=e113]:
+          - generic [ref=e114]: "4"
+          - generic [ref=e115]: Left
+        - generic [ref=e116]:
+          - generic [ref=e117]: "2"
+          - generic [ref=e118]: Has Leave
+        - generic [ref=e119]:
+          - generic [ref=e120]: "6"
+          - generic [ref=e121]: Teams
+      - generic [ref=e122]:
+        - generic [ref=e123] [cursor=pointer]:
+          - generic [ref=e124]: CDC
+          - generic [ref=e125]: 5 / 5
+          - generic [ref=e126]: ▶
+        - table [ref=e128]:
+          - rowgroup [ref=e129]:
+            - row "Username Status Start End Leaves Timeline" [ref=e130]:
+              - columnheader "Username" [ref=e131]
+              - columnheader "Status" [ref=e132]
+              - columnheader "Start" [ref=e133]
+              - columnheader "End" [ref=e134]
+              - columnheader "Leaves" [ref=e135]
+              - columnheader "Timeline" [ref=e136]
+          - rowgroup [ref=e137]:
+            - row "aaronabv Active 2024-01-01 — —" [ref=e138]:
+              - cell "aaronabv" [ref=e139]
+              - cell "Active" [ref=e140]:
+                - generic [ref=e141]: Active
+              - cell "2024-01-01" [ref=e142]
+              - cell "—" [ref=e143]
+              - cell "—" [ref=e144]
+              - cell [ref=e145]
+            - row "eitamring Active 2024-01-01 — —" [ref=e148]:
+              - cell "eitamring" [ref=e149]
+              - cell "Active" [ref=e150]:
+                - generic [ref=e151]: Active
+              - cell "2024-01-01" [ref=e152]
+              - cell "—" [ref=e153]
+              - cell "—" [ref=e154]
+              - cell [ref=e155]
+            - row "Omri-Groen Active 2024-01-01 — —" [ref=e158]:
+              - cell "Omri-Groen" [ref=e159]
+              - cell "Active" [ref=e160]:
+                - generic [ref=e161]: Active
+              - cell "2024-01-01" [ref=e162]
+              - cell "—" [ref=e163]
+              - cell "—" [ref=e164]
+              - cell [ref=e165]
+            - row "shristiguptaa Active 2024-01-01 — —" [ref=e168]:
+              - cell "shristiguptaa" [ref=e169]
+              - cell "Active" [ref=e170]:
+                - generic [ref=e171]: Active
+              - cell "2024-01-01" [ref=e172]
+              - cell "—" [ref=e173]
+              - cell "—" [ref=e174]
+              - cell [ref=e175]
+            - row "sigalikanevsky Active 2024-01-01 — —" [ref=e178]:
+              - cell "sigalikanevsky" [ref=e179]
+              - cell "Active" [ref=e180]:
+                - generic [ref=e181]: Active
+              - cell "2024-01-01" [ref=e182]
+              - cell "—" [ref=e183]
+              - cell "—" [ref=e184]
+              - cell [ref=e185]
+      - generic [ref=e188]:
+        - generic [ref=e189] [cursor=pointer]:
+          - generic [ref=e190]: Core
+          - generic [ref=e191]: 5 / 7
+          - generic [ref=e192]: ▶
+        - table [ref=e194]:
+          - rowgroup [ref=e195]:
+            - row "Username Status Start End Leaves Timeline" [ref=e196]:
+              - columnheader "Username" [ref=e197]
+              - columnheader "Status" [ref=e198]
+              - columnheader "Start" [ref=e199]
+              - columnheader "End" [ref=e200]
+              - columnheader "Leaves" [ref=e201]
+              - columnheader "Timeline" [ref=e202]
+          - rowgroup [ref=e203]:
+            - row "hadasdd Active 2024-01-01 — —" [ref=e204]:
+              - cell "hadasdd" [ref=e205]
+              - cell "Active" [ref=e206]:
+                - generic [ref=e207]: Active
+              - cell "2024-01-01" [ref=e208]
+              - cell "—" [ref=e209]
+              - cell "—" [ref=e210]
+              - cell [ref=e211]
+            - row "noamtzu Left 2025-12-01 2024-01-01 2025-12-01 —" [ref=e214]:
+              - cell "noamtzu" [ref=e215]
+              - cell "Left 2025-12-01" [ref=e216]:
+                - generic [ref=e217]: Left 2025-12-01
+              - cell "2024-01-01" [ref=e218]
+              - cell "2025-12-01" [ref=e219]
+              - cell "—" [ref=e220]
+              - cell [ref=e221]
+            - row "nvgoldin Active 2024-01-01 — —" [ref=e224]:
+              - cell "nvgoldin" [ref=e225]
+              - cell "Active" [ref=e226]:
+                - generic [ref=e227]: Active
+              - cell "2024-01-01" [ref=e228]
+              - cell "—" [ref=e229]
+              - cell "—" [ref=e230]
+              - cell [ref=e231]
+            - row "OhadPerryBoomi Active 2025-05-01 — —" [ref=e234]:
+              - cell "OhadPerryBoomi" [ref=e235]
+              - cell "Active" [ref=e236]:
+                - generic [ref=e237]: Active
+              - cell "2025-05-01" [ref=e238]
+              - cell "—" [ref=e239]
+              - cell "—" [ref=e240]
+              - cell [ref=e241]
+            - row "OmerBor Active 2024-01-01 — —" [ref=e244]:
+              - cell "OmerBor" [ref=e245]
+              - cell "Active" [ref=e246]:
+                - generic [ref=e247]: Active
+              - cell "2024-01-01" [ref=e248]
+              - cell "—" [ref=e249]
+              - cell "—" [ref=e250]
+              - cell [ref=e251]
+            - row "orhss Active 2024-01-01 — —" [ref=e254]:
+              - cell "orhss" [ref=e255]
+              - cell "Active" [ref=e256]:
+                - generic [ref=e257]: Active
+              - cell "2024-01-01" [ref=e258]
+              - cell "—" [ref=e259]
+              - cell "—" [ref=e260]
+              - cell [ref=e261]
+            - row "OronW Left 2026-01-01 2024-01-01 2026-01-01 —" [ref=e264]:
+              - cell "OronW" [ref=e265]
+              - cell "Left 2026-01-01" [ref=e266]:
+                - generic [ref=e267]: Left 2026-01-01
+              - cell "2024-01-01" [ref=e268]
+              - cell "2026-01-01" [ref=e269]
+              - cell "—" [ref=e270]
+              - cell [ref=e271]
+      - generic [ref=e275] [cursor=pointer]:
+        - generic [ref=e276]: Devops
+        - generic [ref=e277]: 5 / 8
+        - generic [ref=e278]: ▶
+      - generic [ref=e280] [cursor=pointer]:
+        - generic [ref=e281]: FullStack
+        - generic [ref=e282]: 5 / 6
+        - generic [ref=e283]: ▶
+      - generic [ref=e285] [cursor=pointer]:
+        - generic [ref=e286]: Integration
+        - generic [ref=e287]: 4 / 4
+        - generic [ref=e288]: ▶
+      - generic [ref=e290] [cursor=pointer]:
+        - generic [ref=e291]: Ninja
+        - generic [ref=e292]: 6 / 6
+        - generic [ref=e293]: ▶
+  - generic:
+    - generic:
+      - generic:
+        - heading "Features" [level=2]
+        - button "×"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Developer PRs" [level=2]
+        - button "×"

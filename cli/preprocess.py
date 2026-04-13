@@ -213,8 +213,9 @@ def truncate_to_token_limit(text: str, max_tokens: int) -> Tuple[str, int]:
         # Decode only the first max_tokens
         truncated = enc.decode(tokens[:max_tokens])
         return truncated, max_tokens
-    except ImportError:
+    except Exception:
         # Fallback: approximate by characters (rough estimate: 4 chars per token)
+        # Catches ImportError, SSLError, and any other tiktoken failures
         char_limit = max_tokens * 4
         if len(text) <= char_limit:
             return text, len(text) // 4

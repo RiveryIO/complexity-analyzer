@@ -1,0 +1,17 @@
+# Copy to bitbucket-teams.cfg and fill in your Bitbucket usernames.
+# This is used to map PR authors to teams for Bitbucket PRs.
+# Format: [TeamName] followed by Bitbucket usernames (one per line or space-separated).
+
+[Core]
+username1
+username2
+
+[Backend]
+username3
+
+[Frontend]
+username4 username5
+
+[Bots]
+# Bot accounts (optional - will be excluded from charts)
+bot-account[bot]

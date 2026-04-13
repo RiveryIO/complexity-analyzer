@@ -1,0 +1,53 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - heading "Engineering Velocity" [level=1] [ref=e6]
+          - paragraph [ref=e7]: Rivery Data Integration engineering velocity
+        - generic [ref=e8]:
+          - img
+          - textbox "Filter charts by title..." [ref=e9]
+    - generic [ref=e10]:
+      - button "📊 Overview" [ref=e11] [cursor=pointer]
+      - button "🔍 Analytics" [ref=e12] [cursor=pointer]
+      - button "👥 People" [ref=e13] [cursor=pointer]
+      - button "📋 Planning" [ref=e14] [cursor=pointer]
+    - generic [ref=e15]:
+      - button "Basic" [ref=e387] [cursor=pointer]
+      - button "Team" [active] [ref=e388] [cursor=pointer]
+    - generic [ref=e389]:
+      - generic [ref=e390]:
+        - button "All" [ref=e391] [cursor=pointer]
+        - button "CDC" [ref=e392] [cursor=pointer]
+        - button "Core" [ref=e393] [cursor=pointer]
+        - button "Devops" [ref=e394] [cursor=pointer]
+        - button "FullStack" [ref=e395] [cursor=pointer]
+        - button "Integration" [ref=e396] [cursor=pointer]
+        - button "Ninja" [ref=e397] [cursor=pointer]
+      - generic [ref=e399]:
+        - generic [ref=e400]:
+          - heading "Complexity Distribution by Team" [level=3] [ref=e401]
+          - generic [ref=e402]: Boxplot per team
+        - generic [ref=e406]:
+          - heading "Team Complexity Gini Coefficient" [level=3] [ref=e407]
+          - generic [ref=e408]: Concentration within each team
+        - generic [ref=e412]:
+          - heading "Velocity per Team per Developer" [level=3] [ref=e413]
+          - generic [ref=e414]: Complexity output divided by headcount
+        - generic [ref=e418]:
+          - heading "Average Merge Cycle Time per Team" [level=3] [ref=e419]
+          - generic [ref=e420]: Hours from creation to merge
+        - generic [ref=e424]:
+          - heading "Complexity vs Cycle Time" [level=3] [ref=e425]
+          - generic [ref=e426]: PR complexity vs hours to merge
+  - generic:
+    - generic:
+      - generic:
+        - heading "Features" [level=2]
+        - button "×"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Developer PRs" [level=2]
+        - button "×"

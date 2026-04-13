@@ -1,0 +1,94 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - heading "Engineering Velocity" [level=1] [ref=e6]
+          - paragraph [ref=e7]: Rivery Data Integration engineering velocity
+        - generic [ref=e8]:
+          - img
+          - textbox "Filter charts by title..." [ref=e9]
+    - generic [ref=e10]:
+      - button "📊 Overview" [active] [ref=e11] [cursor=pointer]
+      - button "🔍 Analytics" [ref=e12] [cursor=pointer]
+      - button "👥 People" [ref=e13] [cursor=pointer]
+      - button "📋 Planning" [ref=e14] [cursor=pointer]
+    - generic [ref=e15]:
+      - button "Basic" [ref=e387] [cursor=pointer]
+      - button "Team" [ref=e388] [cursor=pointer]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e22]: "6.2"
+          - generic [ref=e23]: Velocity/Dev
+          - generic [ref=e24]: Complexity per capita per week
+        - generic [ref=e25]:
+          - generic [ref=e26]: "26"
+          - generic [ref=e27]: Active Devs
+          - generic [ref=e28]: Last 30 days
+        - generic [ref=e29]:
+          - generic [ref=e30]: "3178"
+          - generic [ref=e31]: Total PRs
+          - generic [ref=e32]: All time
+        - generic [ref=e33]:
+          - generic [ref=e34]: "3"
+          - generic [ref=e35]: Avg Complexity
+          - generic [ref=e36]: Per PR
+      - generic [ref=e37]:
+        - generic [ref=e38]: "Jump to:"
+        - link "Velocity Per Capita (by Week)" [ref=e39] [cursor=pointer]:
+          - /url: "#anchor-basic-0"
+        - link "Velocity Over Time (by Week)" [ref=e40] [cursor=pointer]:
+          - /url: "#anchor-basic-1"
+        - link "Velocity by Month" [ref=e41] [cursor=pointer]:
+          - /url: "#anchor-basic-2"
+        - link "PR Count vs Velocity Over Time" [ref=e42] [cursor=pointer]:
+          - /url: "#anchor-basic-3"
+        - link "Average Complexity per PR (..." [ref=e43] [cursor=pointer]:
+          - /url: "#anchor-basic-4"
+        - link "Average Merge Cycle Time (b..." [ref=e44] [cursor=pointer]:
+          - /url: "#anchor-basic-5"
+        - link "Cumulative Velocity Over Time" [ref=e45] [cursor=pointer]:
+          - /url: "#anchor-basic-6"
+      - generic [ref=e46]:
+        - generic [ref=e47]:
+          - heading "Velocity Per Capita (by Week)" [level=3] [ref=e48]
+          - generic [ref=e49]:
+            - text: "Org-wide: total complexity / active developers"
+            - generic [ref=e50]:
+              - generic [ref=e51]: "6.1"
+              - generic [ref=e52]: avg / week
+        - generic [ref=e56]:
+          - heading "Velocity Over Time (by Week)" [level=3] [ref=e57]
+          - generic [ref=e58]: Total complexity per week
+        - generic [ref=e62]:
+          - heading "Velocity by Month" [level=3] [ref=e63]
+          - generic [ref=e64]: Total complexity per month
+        - generic [ref=e68]:
+          - heading "PR Count vs Velocity Over Time" [level=3] [ref=e69]
+          - generic [ref=e70]: Volume vs total complexity
+        - generic [ref=e75]: Quality & Cycle Time
+        - generic [ref=e76]:
+          - heading "Average Complexity per PR (Rolling 4w)" [level=3] [ref=e77]
+          - generic [ref=e78]: Smoothed avg complexity
+        - generic [ref=e82]:
+          - heading "Average Merge Cycle Time (by Week)" [level=3] [ref=e83]
+          - generic [ref=e84]:
+            - text: created_at → merged_at in hours
+            - generic [ref=e85]:
+              - generic [ref=e86]: "63.6"
+              - generic [ref=e87]: hrs avg
+        - generic [ref=e92]: Cumulative Trends
+        - generic [ref=e93]:
+          - heading "Cumulative Velocity Over Time" [level=3] [ref=e94]
+          - generic [ref=e95]: Running total of complexity (by week)
+  - generic:
+    - generic:
+      - generic:
+        - heading "Features" [level=2]
+        - button "×"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Developer PRs" [level=2]
+        - button "×"

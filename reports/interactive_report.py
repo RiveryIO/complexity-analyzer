@@ -2157,7 +2157,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       const weekDate = new Date(week + 'T00:00:00');
       const weekFmt = weekDate.toLocaleDateString('en-US', {{month: 'short', day: 'numeric', year: 'numeric'}});
       const totalComplexity = prs.reduce((sum, pr) => sum + (pr.complexity || 0), 0).toFixed(1);
-      ddTitle.innerHTML = `${{developer}} \u2014 week of ${{weekFmt}}<span class="dd-count">${{prs.length}} PR${{prs.length !== 1 ? 's' : ''}} \u00b7 complexity ${{totalComplexity}}</span>`;
+      ddTitle.innerHTML = `PR List \u2014 ${{developer}} \u2014 week of ${{weekFmt}}<span class="dd-count">${{prs.length}} PR${{prs.length !== 1 ? 's' : ''}} \u00b7 complexity ${{totalComplexity}}</span>`;
 
       const complexityColor = (v) => {{
         if (v >= 8) return '#991b1b';
@@ -2172,24 +2172,47 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
       let tableHtml = `<table class="dd-table">
         <thead><tr>
-          <th>PR</th><th>Complexity</th><th>Merged</th><th>Link</th>
+          <th>PR</th><th>Complexity</th><th>Repo</th><th>Source</th><th>Link</th>
         </tr></thead><tbody>`;
 
       prs.forEach(pr => {{
         const title = pr.title || pr.url || '\u2014';
         const displayTitle = title.length > 60 ? title.slice(0, 60) + '\u2026' : title;
-        const mergedDate = pr.merged_at
-          ? new Date(pr.merged_at + 'T00:00:00').toLocaleDateString('en-US', {{month: 'short', day: 'numeric', year: 'numeric'}})
-          : '\u2014';
         const cx = pr.complexity || 0;
         const badge = `<span style="display:inline-block;font-size:0.7rem;font-family:'Syne',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:${{complexityBg(cx)}};color:${{complexityColor(cx)}}">${{cx}}</span>`;
         const link = pr.url
           ? `<a href="${{pr.url}}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.85rem">\u2192 Open PR</a>`
           : '\u2014';
+
+        // Extract repo name and source from URL
+        let repoName = '\u2014';
+        let source = '\u2014';
+        if (pr.url) {{
+          try {{
+            const url = new URL(pr.url);
+            if (url.hostname.includes('github.com')) {{
+              source = '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#dbeafe;color:#1e40af">GitHub</span>';
+              const pathParts = url.pathname.split('/').filter(p => p);
+              if (pathParts.length >= 2) {{
+                repoName = pathParts[1];
+              }}
+            }} else if (url.hostname.includes('bitbucket.org')) {{
+              source = '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#e0e7ff;color:#4338ca">Bitbucket</span>';
+              const pathParts = url.pathname.split('/').filter(p => p);
+              if (pathParts.length >= 2) {{
+                repoName = pathParts[1];
+              }}
+            }}
+          }} catch (e) {{
+            // Invalid URL, leave as default
+          }}
+        }}
+
         tableHtml += `<tr>
           <td class="cell-name" title="${{title}}"><span class="name-text">${{displayTitle}}</span></td>
           <td>${{badge}}</td>
-          <td style="white-space:nowrap;font-size:0.85rem">${{mergedDate}}</td>
+          <td style="font-size:0.85rem">${{repoName}}</td>
+          <td>${{source}}</td>
           <td>${{link}}</td>
         </tr>`;
       }});

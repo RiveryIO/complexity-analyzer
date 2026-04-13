@@ -1,0 +1,53 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - heading "Engineering Velocity" [level=1] [ref=e6]
+          - paragraph [ref=e7]: Rivery Data Integration engineering velocity
+        - generic [ref=e8]:
+          - img
+          - textbox "Filter charts by title..." [ref=e9]
+    - generic [ref=e10]:
+      - button "📊 Overview" [ref=e11] [cursor=pointer]
+      - button "🔍 Analytics" [ref=e12] [cursor=pointer]
+      - button "👥 People" [ref=e13] [cursor=pointer]
+      - button "📋 Planning" [ref=e14] [cursor=pointer]
+    - generic [ref=e15]:
+      - button "Basic" [ref=e16] [cursor=pointer]
+      - button "Team" [ref=e17] [cursor=pointer]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - button "All" [ref=e21] [cursor=pointer]
+        - button "CDC" [ref=e22] [cursor=pointer]
+        - button "Core" [ref=e23] [cursor=pointer]
+        - button "Devops" [ref=e24] [cursor=pointer]
+        - button "FullStack" [ref=e25] [cursor=pointer]
+        - button "Integration" [ref=e26] [cursor=pointer]
+        - button "Ninja" [ref=e27] [cursor=pointer]
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - heading "Complexity Distribution by Team" [level=3] [ref=e31]
+          - generic [ref=e32]: Boxplot per team
+        - generic [ref=e36]:
+          - heading "Team Complexity Gini Coefficient" [level=3] [ref=e37]
+          - generic [ref=e38]: Concentration within each team
+        - generic [ref=e42]:
+          - heading "Velocity per Team per Developer" [level=3] [ref=e43]
+          - generic [ref=e44]: Complexity output divided by headcount
+        - generic [ref=e48]:
+          - heading "Average Merge Cycle Time per Team" [level=3] [ref=e49]
+          - generic [ref=e50]: Hours from creation to merge
+        - generic [ref=e54]:
+          - heading "Complexity vs Cycle Time" [level=3] [ref=e55]
+          - generic [ref=e56]: PR complexity vs hours to merge
+  - generic:
+    - generic:
+      - generic:
+        - heading "Features" [level=2]
+        - button "×"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Developer PRs" [level=2]
+        - button "×"

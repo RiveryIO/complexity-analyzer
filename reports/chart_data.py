@@ -225,10 +225,10 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
     # 19: Avg merge cycle time (line)
     if "created_at" in df.columns and "merged_at" in df.columns:
         cdf = df.dropna(subset=["created_at", "merged_at"]).copy()
-        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"]) - pd.to_datetime(cdf["created_at"])).dt.total_seconds() / 3600
+        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"], format="mixed", utc=False, errors="coerce") - pd.to_datetime(cdf["created_at"], format="mixed", utc=False, errors="coerce")).dt.total_seconds() / 3600
         cdf = cdf[cdf["cycle_hours"] >= 0]
         if not cdf.empty:
-            merged = pd.to_datetime(cdf["merged_at"])
+            merged = pd.to_datetime(cdf["merged_at"], format="mixed", utc=False, errors="coerce")
             if merged.dt.tz is not None:
                 merged = merged.dt.tz_localize(None, ambiguous="infer")
             cdf["week"] = merged.dt.to_period("W").dt.start_time
@@ -274,8 +274,20 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
         return charts
 
     df = df.copy()
-    df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("").replace("", "Unknown")
-    df = df[df["team"] != "Unknown"]
+    # First, ensure we have a developer column
+    dev_col = "developer" if "developer" in df.columns else "author"
+    df["developer"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").astype(str)
+
+    # Fill in team from developer mapping BEFORE filtering
+    # For rows with no team or empty team, map from developer
+    df["team"] = df.get("team", pd.Series([""] * len(df))).fillna("")
+    df["team"] = df.apply(
+        lambda row: mapping.get(row["developer"], "") if not row["team"] or row["team"] == "" else row["team"],
+        axis=1
+    )
+
+    # Now filter out rows that still have no team
+    df = df[df["team"] != ""]
     if df.empty:
         return charts
 
@@ -337,7 +349,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
     # 20: Avg merge cycle time by team
     if "created_at" in df.columns and "merged_at" in df.columns:
         cdf = df.dropna(subset=["created_at", "merged_at"]).copy()
-        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"]) - pd.to_datetime(cdf["created_at"])).dt.total_seconds() / 3600
+        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"], format="mixed", utc=False, errors="coerce") - pd.to_datetime(cdf["created_at"], format="mixed", utc=False, errors="coerce")).dt.total_seconds() / 3600
         cdf = cdf[cdf["cycle_hours"] >= 0]
         if not cdf.empty:
             team_avg = cdf.groupby("team")["cycle_hours"].mean().sort_values(ascending=False)
@@ -354,7 +366,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
     # 14: Complexity vs cycle time (scatter)
     if "created_at" in df.columns and "merged_at" in df.columns:
         cdf = df.dropna(subset=["created_at", "merged_at"]).copy()
-        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"]) - pd.to_datetime(cdf["created_at"])).dt.total_seconds() / 3600
+        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"], format="mixed", utc=False, errors="coerce") - pd.to_datetime(cdf["created_at"], format="mixed", utc=False, errors="coerce")).dt.total_seconds() / 3600
         cdf = cdf[cdf["cycle_hours"] >= 0]
         if len(cdf) >= 2:
             charts.append({

@@ -1,0 +1,51 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - heading "Engineering Velocity" [level=1] [ref=e6]
+          - paragraph [ref=e7]: Rivery Data Integration engineering velocity
+        - generic [ref=e8]:
+          - img
+          - textbox "Filter charts by title..." [ref=e9]
+    - generic [ref=e10]:
+      - button "📊 Overview" [ref=e11] [cursor=pointer]
+      - button "🔍 Analytics" [ref=e12] [cursor=pointer]
+      - button "👥 People" [ref=e13] [cursor=pointer]
+      - button "📋 Planning" [ref=e14] [cursor=pointer]
+    - generic [ref=e15]:
+      - button "Basic" [ref=e387] [cursor=pointer]
+      - button "Team" [ref=e388] [cursor=pointer]
+    - generic [ref=e389]:
+      - generic [ref=e390]:
+        - button "All" [ref=e391] [cursor=pointer]
+        - button "CDC" [ref=e392] [cursor=pointer]
+        - button "Core" [active] [ref=e393] [cursor=pointer]
+        - button "Devops" [ref=e394] [cursor=pointer]
+        - button "FullStack" [ref=e395] [cursor=pointer]
+        - button "Integration" [ref=e396] [cursor=pointer]
+        - button "Ninja" [ref=e397] [cursor=pointer]
+      - generic [ref=e431]:
+        - generic [ref=e432]:
+          - heading "Velocity Per Capita — Core" [level=3] [ref=e433]
+          - generic [ref=e434]:
+            - text: Complexity / active developers per week
+            - generic [ref=e435]:
+              - generic [ref=e436]: "6.6"
+              - generic [ref=e437]: avg / week
+        - generic [ref=e441]:
+          - heading "Developer Velocity — Core" [level=3] [ref=e442]
+          - generic [ref=e443]: Weekly complexity per developer · click a dot to see PRs
+        - generic [ref=e447]:
+          - heading "Complexity vs PR Count — Core" [level=3] [ref=e448]
+          - generic [ref=e449]: Per developer
+  - generic:
+    - generic:
+      - generic:
+        - heading "Features" [level=2]
+        - button "×"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Developer PRs" [level=2]
+        - button "×"

@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
+from .bitbucket_identity import resolve_bitbucket_username
 from .constants import (
     BITBUCKET_API_BASE_URL,
     BITBUCKET_PER_PAGE,
@@ -98,7 +99,9 @@ def fetch_bb_pr_metadata(
         additions, deletions = _count_diff_lines(diff_text)
 
     author = raw.get("author") or {}
-    nickname = author.get("nickname") or author.get("display_name") or ""
+    # Resolve username via identity mapping to ensure consistency with team mapping
+    # Maps Bitbucket display names (e.g. "Or Hasson") to usernames (e.g. "orhss")
+    username = resolve_bitbucket_username(author)
 
     merged_at = ""
     if raw.get("state") == "MERGED":
@@ -106,7 +109,7 @@ def fetch_bb_pr_metadata(
 
     return {
         "title": raw.get("title") or "",
-        "user": {"login": nickname},
+        "user": {"login": username},
         "created_at": raw.get("created_on") or "",
         "merged_at": merged_at,
         "additions": additions,
