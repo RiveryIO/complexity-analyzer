@@ -163,9 +163,7 @@ def get_team_for_developer(developer: str, mapping: Optional[Dict[str, str]] = N
     return mapping.get(developer.strip(), "")
 
 
-def load_platform_team_mapping(
-    platform: str, cwd: Optional[Path] = None
-) -> Dict[str, str]:
+def load_platform_team_mapping(platform: str, cwd: Optional[Path] = None) -> Dict[str, str]:
     """
     Load team mapping for a specific platform.
 

@@ -51,9 +51,9 @@ https://github.com/test/pr4,3,nvgoldin,2026-03-10,Core,2026-03-10T10:00:00,2026-
     orhss_data = orhss_series["data"]
     orhss_pr_counts = orhss_series["prCounts"]
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("orhss Developer Velocity data:")
-    print("="*80)
+    print("=" * 80)
 
     march_data_found = False
     feb_data_found = False
@@ -70,7 +70,7 @@ https://github.com/test/pr4,3,nvgoldin,2026-03-10,Core,2026-03-10T10:00:00,2026-
     print()
     print(f"February data found: {feb_data_found}")
     print(f"March data found: {march_data_found}")
-    print("="*80)
+    print("=" * 80)
 
     # Assertions
     assert feb_data_found, "orhss should have PRs in February 2026"
@@ -81,12 +81,12 @@ https://github.com/test/pr4,3,nvgoldin,2026-03-10,Core,2026-03-10T10:00:00,2026-
     assert len(march_weeks) > 0, "No March 2026 weeks in x-axis"
 
     march_complexity = sum(
-        orhss_data[i]
-        for i, date in enumerate(x_dates)
-        if date.startswith("2026-03")
+        orhss_data[i] for i, date in enumerate(x_dates) if date.startswith("2026-03")
     )
 
-    assert march_complexity > 0, f"orhss March 2026 total complexity should be > 0, got {march_complexity}"
+    assert (
+        march_complexity > 0
+    ), f"orhss March 2026 total complexity should be > 0, got {march_complexity}"
     print(f"\n✓ orhss March 2026 total complexity: {march_complexity}")
 
 

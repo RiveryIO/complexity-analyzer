@@ -30,14 +30,14 @@ def load_bitbucket_identity_mapping() -> Dict[str, str]:
     team_lead_path = Path.home() / "Documents/Dev/team_lead/config/identity_mapping.yaml"
     if team_lead_path.exists():
         try:
-            with open(team_lead_path, 'r') as f:
+            with open(team_lead_path, "r") as f:
                 data = yaml.safe_load(f)
 
             # Build reverse mapping from display_name -> bitbucket username
-            identities = data.get('identities', {})
+            identities = data.get("identities", {})
             for person_id, person_data in identities.items():
-                display_name = person_data.get('display_name', '')
-                bb_username = person_data.get('platforms', {}).get('bitbucket', '')
+                display_name = person_data.get("display_name", "")
+                bb_username = person_data.get("platforms", {}).get("bitbucket", "")
                 if display_name and bb_username:
                     mapping[display_name] = bb_username
         except Exception:
