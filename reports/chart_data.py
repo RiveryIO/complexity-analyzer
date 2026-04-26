@@ -120,6 +120,78 @@ def _build_team_dev_prs(df: pd.DataFrame) -> Dict[str, Any]:
     return result
 
 
+def _build_cycle_time_prs(df: pd.DataFrame) -> Dict[str, Any]:
+    """Lookup: scope -> week_start_str -> list[pr_dict] for merge cycle time drilldown.
+
+    Scope is "_all" for the org-wide chart and team name for per-team charts.
+    """
+    if "created_at" not in df.columns or "merged_at" not in df.columns:
+        return {}
+
+    mapping = load_team_mapping()
+    cdf = df.dropna(subset=["created_at", "merged_at"]).copy()
+    if cdf.empty:
+        return {}
+
+    created = pd.to_datetime(cdf["created_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
+    merged = pd.to_datetime(cdf["merged_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
+    cdf["_cycle_hours"] = (merged - created).dt.total_seconds() / 3600
+    cdf = cdf[cdf["_cycle_hours"] >= 0]
+    if cdf.empty:
+        return {}
+    cdf["_week"] = merged.dt.to_period("W").dt.start_time
+
+    dev_col = "developer" if "developer" in cdf.columns else "author"
+    cdf["_dev"] = cdf.get(dev_col, pd.Series([""] * len(cdf))).fillna("").astype(str)
+    cdf["_team"] = cdf.get("team", pd.Series([""] * len(cdf))).fillna("")
+    cdf["_team"] = cdf.apply(
+        lambda row: mapping.get(row["_dev"], "") if not row["_team"] or row["_team"] == "" else row["_team"],
+        axis=1,
+    )
+
+    result: Dict[str, Any] = {}
+    for _, row in cdf.iterrows():
+        week = row["_week"]
+        if pd.isna(week):
+            continue
+        week_key = week.strftime("%Y-%m-%d")
+
+        explanation = row.get("explanation", "")
+        if pd.isna(explanation):
+            explanation = ""
+        else:
+            explanation = str(explanation).strip()
+
+        pr_title = row.get("pr_title", "")
+        if pd.isna(pr_title):
+            pr_title = ""
+        else:
+            pr_title = str(pr_title).strip()
+
+        pr_url = str(row.get("pr_url", "") or "")
+        if explanation:
+            title = explanation
+        elif pr_title:
+            title = pr_title
+        else:
+            title = _pr_title_from_url(pr_url)
+
+        pr_dict = {
+            "title": title,
+            "url": pr_url,
+            "complexity": float(row.get("complexity", 0) or 0),
+            "cycle_hours": round(float(row["_cycle_hours"]), 1),
+            "developer": row["_dev"],
+        }
+
+        result.setdefault("_all", {}).setdefault(week_key, []).append(pr_dict)
+        team = row["_team"]
+        if team:
+            result.setdefault(team, {}).setdefault(week_key, []).append(pr_dict)
+
+    return result
+
+
 def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
     charts = []
     df = _ensure_date(df)
@@ -240,11 +312,12 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
                     "id": "19",
                     "type": "line",
                     "title": "Average Merge Cycle Time (by Week)",
-                    "subtitle": "created_at → merged_at in hours",
+                    "subtitle": "created_at → merged_at in hours · click a dot to see PRs",
                     "overall_avg": overall_avg,
                     "x": labels,
                     "y": weekly_cycle.tolist(),
                     "_section": "Quality & Cycle Time",
+                    "_cycle_scope": "_all",
                 })
 
     # 16: Cumulative complexity by week (area/line)
@@ -486,11 +559,12 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                         "id": f"19-{team}",
                         "type": "line",
                         "title": f"Average Merge Cycle Time — {team}",
-                        "subtitle": "created_at → merged_at in hours (by week)",
+                        "subtitle": "created_at → merged_at in hours · click a dot to see PRs",
                         "_subtab": team,
                         "overall_avg": overall_avg,
                         "x": labels,
                         "y": [round(float(v), 1) for v in weekly_cycle.tolist()],
+                        "_cycle_scope": team,
                     })
 
         # 06: Scatter
@@ -877,5 +951,6 @@ def build_all_chart_data(df: pd.DataFrame) -> Dict[str, Any]:
         "_features_rows": features_data.get("rows", []),
         "leaderboard": _extract_leaderboard(df),
         "_team_dev_prs": _build_team_dev_prs(df),
+        "_cycle_time_prs": _build_cycle_time_prs(df),
         "_hero_stats": _extract_hero_stats(df),
     }

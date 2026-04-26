@@ -1122,6 +1122,18 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       if (activeTab && activeTab !== firstTab) {{
         params.set('tab', activeTab);
       }}
+      // Include active subtab (e.g. team name) if the active panel has subtabs
+      const activePanel = document.querySelector('.panel.active');
+      if (activePanel) {{
+        const activeSubtabBtn = activePanel.querySelector('.subtab.active');
+        if (activeSubtabBtn && activeSubtabBtn.dataset.subtab) {{
+          const allSubtabBtns = activePanel.querySelectorAll('.subtab');
+          const firstSubtab = allSubtabBtns[0] && allSubtabBtns[0].dataset.subtab;
+          if (activeSubtabBtn.dataset.subtab !== firstSubtab) {{
+            params.set('subtab', activeSubtabBtn.dataset.subtab);
+          }}
+        }}
+      }}
       const q = document.getElementById('chart-search').value.trim();
       if (q) params.set('q', q);
       const qs = params.toString();
@@ -1607,6 +1619,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     const featuresRows = chartData['_features_rows'] || [];
     const teamDevPrs = chartData['_team_dev_prs'] || {{}};
+    const cycleTimePrs = chartData['_cycle_time_prs'] || {{}};
 
     tabOrder.forEach((key, i) => {{
       const panel = document.createElement('div');
@@ -2012,6 +2025,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
             const sp = panel.querySelector(`.subpanel[data-subtab-panel="${{btn.dataset.subtab}}"][data-parenttab="${{parentKey}}"]`);
             if (sp) sp.classList.add('active');
             (chartInstances[key] || []).forEach(ch => ch.resize());
+            syncURL();
           }};
         }});
       }}
@@ -2038,6 +2052,14 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
                 const team = c._subtab;
                 const prs = ((teamDevPrs[team] || {{}})[developer] || {{}})[week] || [];
                 if (prs.length > 0) openDevPrModal(developer, week, prs);
+              }});
+            }}
+            if (c._cycle_scope) {{
+              ch.on('click', function(params) {{
+                const week = params.name;
+                const scope = c._cycle_scope;
+                const prs = (cycleTimePrs[scope] || {{}})[week] || [];
+                if (prs.length > 0) openCycleTimePrModal(scope, week, prs);
               }});
             }}
             if (c.type === 'scatter' && c._pr_examples) {{
@@ -2211,6 +2233,72 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         tableHtml += `<tr>
           <td class="cell-name" title="${{title}}"><span class="name-text">${{displayTitle}}</span></td>
           <td>${{badge}}</td>
+          <td style="font-size:0.85rem">${{repoName}}</td>
+          <td>${{source}}</td>
+          <td>${{link}}</td>
+        </tr>`;
+      }});
+
+      tableHtml += '</tbody></table>';
+      ddBody.innerHTML = tableHtml;
+      ddOverlay.classList.add('open');
+    }}
+
+    function openCycleTimePrModal(scope, week, prs) {{
+      const ddOverlay = document.getElementById('drilldown-overlay');
+      const ddTitle = document.getElementById('dd-title');
+      const ddBody = document.getElementById('dd-body');
+      const weekDate = new Date(week + 'T00:00:00');
+      const weekFmt = weekDate.toLocaleDateString('en-US', {{month: 'short', day: 'numeric', year: 'numeric'}});
+      const avgCycle = (prs.reduce((s, p) => s + (p.cycle_hours || 0), 0) / prs.length).toFixed(1);
+      const scopeLabel = scope === '_all' ? 'All Teams' : scope;
+      ddTitle.innerHTML = `Merge Cycle Time — ${{scopeLabel}} — week of ${{weekFmt}}<span class="dd-count">${{prs.length}} PR${{prs.length !== 1 ? 's' : ''}} · avg ${{avgCycle}}h</span>`;
+
+      const cxColor = (v) => v >= 8 ? '#991b1b' : v >= 5 ? '#92400e' : '#065f46';
+      const cxBg = (v) => v >= 8 ? '#fee2e2' : v >= 5 ? '#fef3c7' : '#d1fae5';
+      const cycleColor = (h) => h >= 168 ? '#991b1b' : h >= 48 ? '#92400e' : '#065f46';
+      const cycleBg = (h) => h >= 168 ? '#fee2e2' : h >= 48 ? '#fef3c7' : '#d1fae5';
+
+      const sorted = prs.slice().sort((a, b) => (b.cycle_hours || 0) - (a.cycle_hours || 0));
+
+      let tableHtml = `<table class="dd-table">
+        <thead><tr>
+          <th>PR</th><th>Cycle Time</th><th>Complexity</th><th>Developer</th><th>Repo</th><th>Source</th><th>Link</th>
+        </tr></thead><tbody>`;
+
+      sorted.forEach(pr => {{
+        const title = pr.title || pr.url || '—';
+        const displayTitle = title.length > 60 ? title.slice(0, 60) + '…' : title;
+        const cx = pr.complexity || 0;
+        const hrs = pr.cycle_hours || 0;
+        const hrsLabel = hrs >= 24 ? `${{(hrs / 24).toFixed(1)}}d` : `${{hrs.toFixed(1)}}h`;
+        const cxBadge = `<span style="display:inline-block;font-size:0.7rem;font-family:'Syne',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:${{cxBg(cx)}};color:${{cxColor(cx)}}">${{cx}}</span>`;
+        const cycleBadge = `<span style="display:inline-block;font-size:0.7rem;font-family:'Syne',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:${{cycleBg(hrs)}};color:${{cycleColor(hrs)}}">${{hrsLabel}}</span>`;
+        const link = pr.url ? `<a href="${{pr.url}}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.85rem">→ Open PR</a>` : '—';
+        const dev = pr.developer || '—';
+
+        let repoName = '—';
+        let source = '—';
+        if (pr.url) {{
+          try {{
+            const url = new URL(pr.url);
+            if (url.hostname.includes('github.com')) {{
+              source = '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#dbeafe;color:#1e40af">GitHub</span>';
+              const pathParts = url.pathname.split('/').filter(p => p);
+              if (pathParts.length >= 2) repoName = pathParts[1];
+            }} else if (url.hostname.includes('bitbucket.org')) {{
+              source = '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#e0e7ff;color:#4338ca">Bitbucket</span>';
+              const pathParts = url.pathname.split('/').filter(p => p);
+              if (pathParts.length >= 2) repoName = pathParts[1];
+            }}
+          }} catch (e) {{}}
+        }}
+
+        tableHtml += `<tr>
+          <td class="cell-name" title="${{title}}"><span class="name-text">${{displayTitle}}</span></td>
+          <td>${{cycleBadge}}</td>
+          <td>${{cxBadge}}</td>
+          <td style="font-size:0.85rem">${{dev}}</td>
           <td style="font-size:0.85rem">${{repoName}}</td>
           <td>${{source}}</td>
           <td>${{link}}</td>
@@ -2407,6 +2495,14 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           if (groupBtn) groupBtn.classList.add('active');
           renderSubtabs();
           showPanel(tab);
+        }}
+      }}
+      const subtab = params.get('subtab');
+      if (subtab) {{
+        const activePanel = document.querySelector('.panel.active');
+        if (activePanel) {{
+          const btn = activePanel.querySelector(`.subtab[data-subtab="${{subtab}}"]`);
+          if (btn) btn.click();
         }}
       }}
       const q = params.get('q');
