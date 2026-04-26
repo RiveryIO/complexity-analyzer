@@ -465,6 +465,34 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                     "series": series_30,
                 })
 
+        # 19-T: Avg merge cycle time (by week) for this team
+        if "created_at" in tdf.columns and "merged_at" in tdf.columns:
+            ctdf = tdf.dropna(subset=["created_at", "merged_at"]).copy()
+            ctdf["cycle_hours"] = (
+                pd.to_datetime(ctdf["merged_at"], format="mixed", utc=False, errors="coerce")
+                - pd.to_datetime(ctdf["created_at"], format="mixed", utc=False, errors="coerce")
+            ).dt.total_seconds() / 3600
+            ctdf = ctdf[ctdf["cycle_hours"] >= 0]
+            if not ctdf.empty:
+                merged = pd.to_datetime(ctdf["merged_at"], format="mixed", utc=False, errors="coerce")
+                if merged.dt.tz is not None:
+                    merged = merged.dt.tz_localize(None, ambiguous="infer")
+                ctdf["week"] = merged.dt.to_period("W").dt.start_time
+                weekly_cycle = ctdf.groupby("week")["cycle_hours"].mean()
+                if not weekly_cycle.empty:
+                    labels = [d.strftime("%Y-%m-%d") for d in weekly_cycle.index]
+                    overall_avg = round(float(weekly_cycle.mean()), 1)
+                    charts.append({
+                        "id": f"19-{team}",
+                        "type": "line",
+                        "title": f"Average Merge Cycle Time — {team}",
+                        "subtitle": "created_at → merged_at in hours (by week)",
+                        "_subtab": team,
+                        "overall_avg": overall_avg,
+                        "x": labels,
+                        "y": [round(float(v), 1) for v in weekly_cycle.tolist()],
+                    })
+
         # 06: Scatter
         agg = tdf.groupby("developer").agg(pr_count=("pr_url", "count"), total_complexity=("complexity", "sum"))
         if len(agg) >= 2:
