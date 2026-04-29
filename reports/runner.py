@@ -33,7 +33,7 @@ def load_dataframe(csv_path: Path) -> pd.DataFrame:
     # Parse dates
     for col in ("merged_at", "created_at", "date"):
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
+            df[col] = pd.to_datetime(df[col], format="mixed", utc=True, errors="coerce")
     # Parse numeric
     for col in ("complexity", "lines_added", "lines_deleted"):
         if col in df.columns:
