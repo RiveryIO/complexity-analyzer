@@ -6,7 +6,17 @@ from typing import Any, Dict, List
 import numpy as np
 import pandas as pd
 
-from cli.team_config import get_weekly_headcounts, load_team_mapping
+from cli.team_config import get_weekly_headcounts, load_developer_tenure, load_team_mapping
+
+
+def _departed_developers(cutoff_days: int = 60) -> "set[str]":
+    """Usernames whose tenure ended more than `cutoff_days` ago."""
+    tenure = load_developer_tenure()
+    cutoff = (pd.Timestamp.now().normalize() - pd.Timedelta(days=cutoff_days)).date()
+    return {
+        name for name, info in tenure.items()
+        if info.get("end") and info["end"] < cutoff
+    }
 
 
 def _ensure_date(df: pd.DataFrame) -> pd.DataFrame:
@@ -515,8 +525,13 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
             dev_week_cx = dev_week_cx.reindex(all_week_dates, fill_value=0)
             dev_week_cnt = dev_week_cnt.reindex(all_week_dates, fill_value=0)
             week_labels_30 = [w.strftime("%Y-%m-%d") for w in all_week_dates]
+            departed = _departed_developers()
+            devs_sorted = sorted(
+                (d for d in dev_week_cx.columns if d not in departed),
+                key=lambda x: str(x).lower(),
+            )
             series_30 = []
-            for dev in dev_week_cx.columns:
+            for dev in devs_sorted:
                 cx_vals = [round(float(v), 2) for v in dev_week_cx[dev].tolist()]
                 if dev in dev_week_cnt.columns:
                     cnt_vals = [int(v) for v in dev_week_cnt[dev].tolist()]
@@ -919,6 +934,48 @@ def _extract_hero_stats(df: pd.DataFrame) -> Dict[str, Any]:
     dev_col = "developer" if "developer" in df.columns else "author"
     active_devs = last_30d[dev_col].nunique() if not last_30d.empty else 0
 
+    # Top active devs in the last 30 days (for the Active Devs tile modal).
+    active_devs_list: list[dict] = []
+    if not last_30d.empty and dev_col in last_30d.columns:
+        grouped = last_30d.groupby(dev_col).agg(
+            prs=(dev_col, "size"),
+            complexity=("complexity", "sum") if "complexity" in last_30d.columns else (dev_col, "size"),
+        )
+        if "team" in last_30d.columns:
+            team_map = last_30d.groupby(dev_col)["team"].agg(
+                lambda s: s.dropna().iloc[0] if not s.dropna().empty else ""
+            )
+            grouped["team"] = team_map
+        grouped = grouped.sort_values("prs", ascending=False)
+        for name, row in grouped.iterrows():
+            active_devs_list.append({
+                "developer": str(name),
+                "team": str(row.get("team", "")) if "team" in grouped.columns else "",
+                "prs": int(row["prs"]),
+                "complexity": round(float(row["complexity"]), 1),
+            })
+
+    # 20 most recent merged PRs (for the Total PRs tile modal).
+    recent_prs_list: list[dict] = []
+    sort_col = "merged_at" if "merged_at" in df.columns and df["merged_at"].notna().any() else "date"
+    recent_df = df.sort_values(sort_col, ascending=False).head(20)
+    for _, row in recent_df.iterrows():
+        merged_at = row.get(sort_col)
+        merged_str = ""
+        if pd.notna(merged_at):
+            try:
+                merged_str = pd.to_datetime(merged_at).strftime("%Y-%m-%d")
+            except Exception:
+                merged_str = str(merged_at)[:10]
+        recent_prs_list.append({
+            "title": str(row.get("pr_title", "") or ""),
+            "url": str(row.get("pr_url", "") or ""),
+            "developer": str(row.get(dev_col, "") or ""),
+            "team": str(row.get("team", "") or ""),
+            "complexity": round(float(row.get("complexity", 0) or 0), 1),
+            "merged_at": merged_str,
+        })
+
     # Total PRs and avg complexity
     total_prs = len(df)
     avg_cx = round(df["complexity"].mean(), 1) if "complexity" in df.columns else 0
@@ -928,6 +985,8 @@ def _extract_hero_stats(df: pd.DataFrame) -> Dict[str, Any]:
         "active_developers": active_devs,
         "total_prs": total_prs,
         "avg_complexity": avg_cx,
+        "active_devs_list": active_devs_list,
+        "recent_prs_list": recent_prs_list,
     }
 
 

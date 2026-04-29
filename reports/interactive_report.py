@@ -394,6 +394,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     .hero-card:hover::before {{
       opacity: 1;
     }}
+    .hero-card.hero-clickable {{ cursor: pointer; }}
+    .hero-card.hero-clickable:hover {{ box-shadow: 0 16px 40px rgba(0,0,0,0.12); }}
     .hero-value {{
       font-family: 'Syne', sans-serif;
       font-size: 3rem;
@@ -1142,6 +1144,26 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
     const COLORS = ['#b45309', '#0d9488', '#7c3aed', '#2563eb', '#ea580c', '#16a34a', '#dc2626', '#6b7280'];
 
+    function applyTimeZoom(opt, options) {{
+      // Adds wheel/pinch zoom + a slider mini-map to time-series category charts.
+      // topSlider=true places the slider above the grid (use when legend is at bottom).
+      options = options || {{}};
+      const topSlider = !!options.topSlider;
+      const inside = {{ type: 'inside', xAxisIndex: 0, throttle: 30, zoomOnMouseWheel: 'shift', moveOnMouseWheel: false, moveOnMouseMove: false }};
+      const grid = opt.grid || {{}};
+      let slider;
+      if (topSlider) {{
+        slider = {{ type: 'slider', xAxisIndex: 0, top: 6, height: 14, brushSelect: false, showDetail: false }};
+        opt.grid = {{ ...grid, top: Math.max(grid.top || 40, 56) }};
+      }} else {{
+        const curBottom = grid.bottom != null ? grid.bottom : 60;
+        slider = {{ type: 'slider', xAxisIndex: 0, bottom: 8, height: 14, brushSelect: false, showDetail: false }};
+        opt.grid = {{ ...grid, bottom: curBottom + 28 }};
+      }}
+      opt.dataZoom = [inside, slider];
+      return opt;
+    }}
+
     function renderBar(container, c) {{
       const opt = {{
         ...CHART_THEME,
@@ -1151,6 +1173,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         yAxis: {{ type: 'value', minInterval: 0 }},
         series: [{{ type: 'bar', data: c.y, barWidth: '50%', barMinWidth: 20, barMaxWidth: 100, itemStyle: {{ color: COLORS[0] }} }}],
       }};
+      applyTimeZoom(opt);
       const chart = echarts.init(container);
       chart.setOption(opt);
       window.addEventListener('resize', () => chart.resize());
@@ -1176,6 +1199,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         yAxis: {{ type: 'value', minInterval: 0 }},
         series: [seriesItem],
       }};
+      applyTimeZoom(opt);
       const chart = echarts.init(container);
       chart.setOption(opt);
       window.addEventListener('resize', () => chart.resize());
@@ -1198,6 +1222,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           {{ type: 'line', name: c.y2Name, data: c.y2, smooth: true, yAxisIndex: 1, itemStyle: {{ color: COLORS[1] }} }},
         ],
       }};
+      applyTimeZoom(opt);
       const chart = echarts.init(container);
       chart.setOption(opt);
       window.addEventListener('resize', () => chart.resize());
@@ -1244,6 +1269,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         yAxis: {{ type: 'value', minInterval: 0 }},
         series,
       }};
+      applyTimeZoom(opt, {{ topSlider: true }});
       const chart = echarts.init(container);
       chart.setOption(opt);
       window.addEventListener('resize', () => chart.resize());
@@ -1407,6 +1433,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         yAxis: {{ type: 'value', minInterval: 0 }},
         series,
       }};
+      applyTimeZoom(opt, {{ topSlider: true }});
       const chart = echarts.init(container);
       chart.setOption(opt);
       window.addEventListener('resize', () => chart.resize());
@@ -1472,6 +1499,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         yAxis: {{ type: 'value', minInterval: 0 }},
         series: [{{ type: 'line', data: c.y, areaStyle: {{}}, smooth: true, itemStyle: {{ color: COLORS[0] }} }}],
       }};
+      applyTimeZoom(opt);
       const chart = echarts.init(container);
       chart.setOption(opt);
       window.addEventListener('resize', () => chart.resize());
@@ -1492,14 +1520,21 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         smooth: false,
         connectNulls: false,
       }}));
+      const defaultSelected = {{}};
+      series.forEach((s, i) => {{ defaultSelected[s.name] = i === 0; }});
       chart.setOption({{
         ...CHART_THEME,
         legend: {{
           type: 'scroll',
           bottom: 0,
           textStyle: {{fontSize: 11}},
+          selected: defaultSelected,
         }},
-        grid: {{top: 28, right: 16, bottom: 60, left: 48, containLabel: false}},
+        dataZoom: [
+          {{ type: 'inside', xAxisIndex: 0, throttle: 30, zoomOnMouseWheel: 'shift', moveOnMouseWheel: false, moveOnMouseMove: false }},
+          {{ type: 'slider', xAxisIndex: 0, top: 6, height: 14, brushSelect: false, showDetail: false }},
+        ],
+        grid: {{top: 56, right: 16, bottom: 60, left: 48, containLabel: false}},
         xAxis: {{
           type: 'category',
           data: weeks,
@@ -1711,12 +1746,31 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       }}
 
       if (key === 'engineers') {{
-        const allMembers = engineersData.flatMap(t => t.members);
+        // Drop members who left more than 2 months ago from the current-state roster.
+        // Historical charts/leaderboards keep their PRs — this only filters the People view.
+        const cutoffMs = Date.now() - 60 * 24 * 60 * 60 * 1000;
+        const teamsView = engineersData
+          .map(t => {{
+            const members = (t.members || [])
+              .filter(m => !m.end || new Date(m.end + 'T00:00:00').getTime() >= cutoffMs)
+              .slice()
+              .sort((a, b) => {{
+                const aEnded = a.end != null;
+                const bEnded = b.end != null;
+                if (aEnded !== bEnded) return aEnded ? 1 : -1; // active first
+                if (aEnded && bEnded) return b.end.localeCompare(a.end); // most recent end first
+                return (a.username || '').localeCompare(b.username || '');
+              }});
+            return {{ ...t, members }};
+          }})
+          .filter(t => t.members.length > 0);
+
+        const allMembers = teamsView.flatMap(t => t.members);
         const totalActive = allMembers.filter(m => m.active === true).length;
         const totalEnded = allMembers.filter(m => m.end != null).length;
         const totalOnLeave = allMembers.filter(m => m.leaves && m.leaves.length > 0).length;
         const totalNoData = allMembers.filter(m => m.start == null).length;
-        const totalTeams = engineersData.length;
+        const totalTeams = teamsView.length;
 
         const earliest = allMembers.filter(m => m.start).map(m => m.start).sort()[0] || '2024-01-01';
         const today = new Date().toISOString().slice(0, 10);
@@ -1754,7 +1808,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         }}
 
         let teamCards = '';
-        engineersData.forEach((t, ti) => {{
+        teamsView.forEach((t, ti) => {{
           const active = t.members.filter(m => m.active === true).length;
           const rows = t.members.map(m => `
             <tr>
@@ -1889,15 +1943,15 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="hero-label">Velocity/Dev</div>
             <div class="hero-sublabel">Complexity per capita per week</div>
           </div>
-          <div class="hero-card">
+          <div class="hero-card hero-clickable" data-hero="active_devs">
             <div class="hero-value">${{heroStats.active_developers || 0}}</div>
             <div class="hero-label">Active Devs</div>
-            <div class="hero-sublabel">Last 30 days</div>
+            <div class="hero-sublabel">Last 30 days &middot; click to view</div>
           </div>
-          <div class="hero-card">
+          <div class="hero-card hero-clickable" data-hero="total_prs">
             <div class="hero-value">${{heroStats.total_prs || 0}}</div>
             <div class="hero-label">Total PRs</div>
-            <div class="hero-sublabel">All time</div>
+            <div class="hero-sublabel">All time &middot; click to view recent</div>
           </div>
           <div class="hero-card">
             <div class="hero-value">${{heroStats.avg_complexity || 0}}</div>
@@ -2014,6 +2068,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
       panel.innerHTML = html;
       panelsEl.appendChild(panel);
+
+      panel.querySelectorAll('.hero-clickable').forEach(card => {{
+        card.addEventListener('click', () => openHeroModal(card.dataset.hero));
+      }});
 
       if (hasSubtabs) {{
         panel.querySelectorAll('.subtab').forEach(btn => {{
@@ -2171,6 +2229,72 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     const ddTitle = document.getElementById('dd-title');
     const ddBody = document.getElementById('dd-body');
     const ddClose = document.getElementById('dd-close');
+
+    function escapeHtml(s) {{
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }})[c]);
+    }}
+
+    function openHeroModal(kind) {{
+      const ddOverlay = document.getElementById('drilldown-overlay');
+      const ddTitle = document.getElementById('dd-title');
+      const ddBody = document.getElementById('dd-body');
+
+      if (kind === 'active_devs') {{
+        const list = (heroStats.active_devs_list || []);
+        ddTitle.innerHTML = `Active Developers — last 30 days<span class="dd-count">${{list.length}} dev${{list.length !== 1 ? 's' : ''}}</span>`;
+        if (!list.length) {{
+          ddBody.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No PR activity in the last 30 days.</p>';
+        }} else {{
+          let html = '<table class="dd-table"><thead><tr><th>#</th><th>Developer</th><th>Team</th><th>PRs</th><th>Complexity</th></tr></thead><tbody>';
+          list.forEach((d, i) => {{
+            html += `<tr>
+              <td style="font-family:'IBM Plex Mono',monospace;color:var(--text-muted)">${{i + 1}}</td>
+              <td class="cell-name"><span class="name-text">${{escapeHtml(d.developer)}}</span></td>
+              <td style="font-size:0.85rem">${{escapeHtml(d.team || '—')}}</td>
+              <td><b>${{d.prs}}</b></td>
+              <td>${{d.complexity}}</td>
+            </tr>`;
+          }});
+          html += '</tbody></table>';
+          ddBody.innerHTML = html;
+        }}
+        ddOverlay.classList.add('open');
+        return;
+      }}
+
+      if (kind === 'total_prs') {{
+        const list = (heroStats.recent_prs_list || []);
+        ddTitle.innerHTML = `Recent PRs<span class="dd-count">${{list.length}} most recent</span>`;
+        if (!list.length) {{
+          ddBody.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No PRs available.</p>';
+        }} else {{
+          const cxColor = (v) => v >= 8 ? '#991b1b' : v >= 5 ? '#92400e' : '#065f46';
+          const cxBg = (v) => v >= 8 ? '#fee2e2' : v >= 5 ? '#fef3c7' : '#d1fae5';
+          let html = '<table class="dd-table"><thead><tr><th>PR</th><th>Developer</th><th>Team</th><th>Complexity</th><th>Merged</th><th>Link</th></tr></thead><tbody>';
+          list.forEach(pr => {{
+            const title = pr.title || pr.url || '—';
+            const display = title.length > 70 ? title.slice(0, 70) + '…' : title;
+            const cx = pr.complexity || 0;
+            const badge = `<span style="display:inline-block;font-size:0.7rem;font-family:'Syne',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:${{cxBg(cx)}};color:${{cxColor(cx)}}">${{cx}}</span>`;
+            const link = pr.url
+              ? `<a href="${{escapeHtml(pr.url)}}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.85rem">→ Open</a>`
+              : '—';
+            html += `<tr>
+              <td class="cell-name" title="${{escapeHtml(title)}}"><span class="name-text">${{escapeHtml(display)}}</span></td>
+              <td style="font-size:0.85rem">${{escapeHtml(pr.developer || '—')}}</td>
+              <td style="font-size:0.85rem">${{escapeHtml(pr.team || '—')}}</td>
+              <td>${{badge}}</td>
+              <td style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem">${{escapeHtml(pr.merged_at || '—')}}</td>
+              <td>${{link}}</td>
+            </tr>`;
+          }});
+          html += '</tbody></table>';
+          ddBody.innerHTML = html;
+        }}
+        ddOverlay.classList.add('open');
+        return;
+      }}
+    }}
 
     function openDevPrModal(developer, week, prs) {{
       const ddOverlay = document.getElementById('drilldown-overlay');
