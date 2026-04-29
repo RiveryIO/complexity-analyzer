@@ -8,3 +8,4 @@ Small todos and improvements to pick up when convenient.
 - check bitbucket tagging complexity in pr 
 - check if can be automated via bitbucket and snowflake
 - check if can rsup data be pulled from boomi snowflake(got a user recently)
+- complexity bitbucket prs are not showing 
