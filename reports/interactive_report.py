@@ -1655,6 +1655,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     const featuresRows = chartData['_features_rows'] || [];
     const teamDevPrs = chartData['_team_dev_prs'] || {{}};
     const cycleTimePrs = chartData['_cycle_time_prs'] || {{}};
+    const velocityPrs = chartData['_velocity_prs'] || {{}};
 
     tabOrder.forEach((key, i) => {{
       const panel = document.createElement('div');
@@ -2120,6 +2121,14 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
                 if (prs.length > 0) openCycleTimePrModal(scope, week, prs);
               }});
             }}
+            if (c._velocity_scope) {{
+              ch.on('click', function(params) {{
+                const week = params.name;
+                const scope = c._velocity_scope;
+                const prs = (velocityPrs[scope] || {{}})[week] || [];
+                if (prs.length > 0) openVelocityPrModal(scope, week, prs);
+              }});
+            }}
             if (c.type === 'scatter' && c._pr_examples) {{
               ch.on('click', function(params) {{
                 const linesChanged = params.data[0];
@@ -2423,6 +2432,70 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           <td>${{cycleBadge}}</td>
           <td>${{cxBadge}}</td>
           <td style="font-size:0.85rem">${{dev}}</td>
+          <td style="font-size:0.85rem">${{repoName}}</td>
+          <td>${{source}}</td>
+          <td>${{link}}</td>
+        </tr>`;
+      }});
+
+      tableHtml += '</tbody></table>';
+      ddBody.innerHTML = tableHtml;
+      ddOverlay.classList.add('open');
+    }}
+
+    function openVelocityPrModal(scope, week, prs) {{
+      const ddOverlay = document.getElementById('drilldown-overlay');
+      const ddTitle = document.getElementById('dd-title');
+      const ddBody = document.getElementById('dd-body');
+      const weekDate = new Date(week + 'T00:00:00');
+      const weekFmt = weekDate.toLocaleDateString('en-US', {{month: 'short', day: 'numeric', year: 'numeric'}});
+      const totalCx = prs.reduce((s, p) => s + (p.complexity || 0), 0);
+      const devSet = new Set(prs.map(p => p.developer).filter(Boolean));
+      const perCapita = devSet.size > 0 ? (totalCx / devSet.size).toFixed(2) : '0';
+      const scopeLabel = scope === '_all' ? 'All Teams' : scope;
+      ddTitle.innerHTML = `Velocity Per Capita — ${{scopeLabel}} — week of ${{weekFmt}}<span class="dd-count">${{prs.length}} PR${{prs.length !== 1 ? 's' : ''}} · ${{devSet.size}} dev${{devSet.size !== 1 ? 's' : ''}} · total cx ${{totalCx}} · per-capita ${{perCapita}}</span>`;
+
+      const cxColor = (v) => v >= 8 ? '#991b1b' : v >= 5 ? '#92400e' : '#065f46';
+      const cxBg = (v) => v >= 8 ? '#fee2e2' : v >= 5 ? '#fef3c7' : '#d1fae5';
+
+      const sorted = prs.slice().sort((a, b) => (b.complexity || 0) - (a.complexity || 0));
+
+      let tableHtml = `<table class="dd-table">
+        <thead><tr>
+          <th>PR</th><th>Complexity</th><th>Developer</th><th>Team</th><th>Repo</th><th>Source</th><th>Link</th>
+        </tr></thead><tbody>`;
+
+      sorted.forEach(pr => {{
+        const title = pr.title || pr.url || '—';
+        const displayTitle = title.length > 60 ? title.slice(0, 60) + '…' : title;
+        const cx = pr.complexity || 0;
+        const cxBadge = `<span style="display:inline-block;font-size:0.7rem;font-family:'Syne',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:${{cxBg(cx)}};color:${{cxColor(cx)}}">${{cx}}</span>`;
+        const link = pr.url ? `<a href="${{pr.url}}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.85rem">→ Open PR</a>` : '—';
+        const dev = pr.developer || '—';
+        const team = pr.team || '—';
+
+        let repoName = '—';
+        let source = '—';
+        if (pr.url) {{
+          try {{
+            const url = new URL(pr.url);
+            if (url.hostname.includes('github.com')) {{
+              source = '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#dbeafe;color:#1e40af">GitHub</span>';
+              const pathParts = url.pathname.split('/').filter(p => p);
+              if (pathParts.length >= 2) repoName = pathParts[1];
+            }} else if (url.hostname.includes('bitbucket.org')) {{
+              source = '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#e0e7ff;color:#4338ca">Bitbucket</span>';
+              const pathParts = url.pathname.split('/').filter(p => p);
+              if (pathParts.length >= 2) repoName = pathParts[1];
+            }}
+          }} catch (e) {{}}
+        }}
+
+        tableHtml += `<tr>
+          <td class="cell-name" title="${{title}}"><span class="name-text">${{displayTitle}}</span></td>
+          <td>${{cxBadge}}</td>
+          <td style="font-size:0.85rem">${{dev}}</td>
+          <td style="font-size:0.85rem">${{team}}</td>
           <td style="font-size:0.85rem">${{repoName}}</td>
           <td>${{source}}</td>
           <td>${{link}}</td>

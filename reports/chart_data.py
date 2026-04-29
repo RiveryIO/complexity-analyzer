@@ -202,6 +202,55 @@ def _build_cycle_time_prs(df: pd.DataFrame) -> Dict[str, Any]:
     return result
 
 
+def _build_velocity_prs(df: pd.DataFrame) -> Dict[str, Any]:
+    """Lookup: scope -> week_start_str -> list[pr_dict] for velocity drilldown.
+
+    Scope is "_all" for the org-wide chart (excludes Bots/Unknown).
+    """
+    if df.empty or "date" not in df.columns:
+        return {}
+
+    vdf = df.copy()
+    vdf["_dt"] = pd.to_datetime(vdf["date"], format="mixed", utc=False, errors="coerce")
+    vdf = vdf.dropna(subset=["_dt"])
+    if vdf.empty:
+        return {}
+
+    vdf["_week"] = vdf["_dt"].dt.to_period("W").dt.start_time
+    vdf["_team"] = vdf.get("team", pd.Series([""] * len(vdf))).fillna("").replace("", "Unknown")
+    vdf = vdf[~vdf["_team"].isin(["Bots", "Unknown"])]
+    if vdf.empty:
+        return {}
+
+    dev_col = "developer" if "developer" in vdf.columns else "author"
+    vdf["_dev"] = vdf.get(dev_col, pd.Series([""] * len(vdf))).fillna("").astype(str)
+
+    result: Dict[str, Any] = {}
+    for _, row in vdf.iterrows():
+        week = row["_week"]
+        if pd.isna(week):
+            continue
+        week_key = week.strftime("%Y-%m-%d")
+
+        explanation = row.get("explanation", "")
+        explanation = "" if pd.isna(explanation) else str(explanation).strip()
+        pr_title = row.get("pr_title", "")
+        pr_title = "" if pd.isna(pr_title) else str(pr_title).strip()
+        pr_url = str(row.get("pr_url", "") or "")
+        title = explanation or pr_title or _pr_title_from_url(pr_url)
+
+        pr_dict = {
+            "title": title,
+            "url": pr_url,
+            "complexity": float(row.get("complexity", 0) or 0),
+            "developer": row["_dev"],
+            "team": row["_team"],
+        }
+        result.setdefault("_all", {}).setdefault(week_key, []).append(pr_dict)
+
+    return result
+
+
 def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
     charts = []
     df = _ensure_date(df)
@@ -236,12 +285,13 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "id": "22",
                 "type": "line",
                 "title": "Velocity Per Capita (by Week)",
-                "subtitle": "Org-wide: total complexity / active developers",
+                "subtitle": "Org-wide: total complexity / active developers · click a dot to see PRs",
                 "overall_avg": avg_pc,
                 "overall_avg_unit": "avg / week",
                 "x": week_labels,
                 "y": per_capita,
                 "_section": "Velocity Metrics",
+                "_velocity_scope": "_all",
             })
 
     # 01: Complexity volume over time (bar)
@@ -1011,5 +1061,6 @@ def build_all_chart_data(df: pd.DataFrame) -> Dict[str, Any]:
         "leaderboard": _extract_leaderboard(df),
         "_team_dev_prs": _build_team_dev_prs(df),
         "_cycle_time_prs": _build_cycle_time_prs(df),
+        "_velocity_prs": _build_velocity_prs(df),
         "_hero_stats": _extract_hero_stats(df),
     }
