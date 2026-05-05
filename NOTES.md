@@ -9,3 +9,5 @@ Small todos and improvements to pick up when convenient.
 - check if can be automated via bitbucket and snowflake
 - check if can rsup data be pulled from boomi snowflake(got a user recently)
 - complexity bitbucket prs are not showing 
+- daily/twice a week post velocity metrics to team channel with insights
+
