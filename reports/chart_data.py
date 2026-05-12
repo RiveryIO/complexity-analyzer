@@ -1017,6 +1017,13 @@ def _extract_hero_stats(df: pd.DataFrame) -> Dict[str, Any]:
                 merged_str = pd.to_datetime(merged_at).strftime("%Y-%m-%d")
             except Exception:
                 merged_str = str(merged_at)[:10]
+        src = str(row.get("source", "") or "").strip().lower()
+        if not src:
+            url = str(row.get("pr_url", "") or "")
+            if "github.com" in url:
+                src = "github"
+            elif "bitbucket.org" in url:
+                src = "bitbucket"
         recent_prs_list.append({
             "title": str(row.get("pr_title", "") or ""),
             "url": str(row.get("pr_url", "") or ""),
@@ -1024,6 +1031,7 @@ def _extract_hero_stats(df: pd.DataFrame) -> Dict[str, Any]:
             "team": str(row.get("team", "") or ""),
             "complexity": round(float(row.get("complexity", 0) or 0), 1),
             "merged_at": merged_str,
+            "source": src,
         })
 
     # Total PRs and avg complexity

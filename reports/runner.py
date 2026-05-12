@@ -152,7 +152,7 @@ def run_reports(
     # Build interactive HTML report (tabbed dashboard + D3 developer velocity)
     from reports.interactive_report import build_interactive_report
 
-    interactive_path = build_interactive_report(df, output_dir, generated_paths=generated)
+    interactive_path = build_interactive_report(df, output_dir, generated_paths=generated, csv_path=csv_path)
     if interactive_path:
         generated.append(interactive_path)
 

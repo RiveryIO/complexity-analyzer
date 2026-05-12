@@ -118,10 +118,21 @@ def build_interactive_report(
     df: pd.DataFrame,
     output_dir: Path,
     generated_paths: Optional[List[str]] = None,
+    csv_path: Optional[Path] = None,
 ) -> str:
     """Build tabbed HTML dashboard with dynamic ECharts. Returns path to index.html."""
     output_dir = Path(output_dir)
     chart_data = build_all_chart_data(df)
+    last_synced = ""
+    if csv_path is not None:
+        try:
+            mtime = Path(csv_path).stat().st_mtime
+            from datetime import datetime as _dt
+            last_synced = _dt.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+        except OSError:
+            last_synced = ""
+    hero = chart_data.setdefault("_hero_stats", {})
+    hero["last_synced"] = last_synced
     data_json = json.dumps(chart_data, default=str)
     engineers_json = json.dumps(_build_engineers_data(), default=str)
     changelog_json = json.dumps(_build_changelog_data(), default=str)
@@ -1952,7 +1963,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           <div class="hero-card hero-clickable" data-hero="total_prs">
             <div class="hero-value">${{heroStats.total_prs || 0}}</div>
             <div class="hero-label">Total PRs</div>
-            <div class="hero-sublabel">All time &middot; click to view recent</div>
+            <div class="hero-sublabel">${{heroStats.last_synced ? `Last synced ${{heroStats.last_synced}} &middot; click to view recent` : 'All time &middot; click to view recent'}}</div>
           </div>
           <div class="hero-card">
             <div class="hero-value">${{heroStats.avg_complexity || 0}}</div>
@@ -2273,13 +2284,20 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
       if (kind === 'total_prs') {{
         const list = (heroStats.recent_prs_list || []);
-        ddTitle.innerHTML = `Recent PRs<span class="dd-count">${{list.length}} most recent</span>`;
+        const syncedSuffix = heroStats.last_synced ? ` &middot; last synced ${{escapeHtml(heroStats.last_synced)}}` : '';
+        ddTitle.innerHTML = `Recent PRs<span class="dd-count">${{list.length}} most recent${{syncedSuffix}}</span>`;
         if (!list.length) {{
           ddBody.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No PRs available.</p>';
         }} else {{
           const cxColor = (v) => v >= 8 ? '#991b1b' : v >= 5 ? '#92400e' : '#065f46';
           const cxBg = (v) => v >= 8 ? '#fee2e2' : v >= 5 ? '#fef3c7' : '#d1fae5';
-          let html = '<table class="dd-table"><thead><tr><th>PR</th><th>Developer</th><th>Team</th><th>Complexity</th><th>Merged</th><th>Link</th></tr></thead><tbody>';
+          const srcBadge = (s) => {{
+            const v = String(s || '').toLowerCase();
+            if (v === 'github') return '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#dbeafe;color:#1e40af">GitHub</span>';
+            if (v === 'bitbucket') return '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#e0e7ff;color:#4338ca">Bitbucket</span>';
+            return '—';
+          }};
+          let html = '<table class="dd-table"><thead><tr><th>PR</th><th>Developer</th><th>Team</th><th>Source</th><th>Complexity</th><th>Merged</th><th>Link</th></tr></thead><tbody>';
           list.forEach(pr => {{
             const title = pr.title || pr.url || '—';
             const display = title.length > 70 ? title.slice(0, 70) + '…' : title;
@@ -2292,6 +2310,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
               <td class="cell-name" title="${{escapeHtml(title)}}"><span class="name-text">${{escapeHtml(display)}}</span></td>
               <td style="font-size:0.85rem">${{escapeHtml(pr.developer || '—')}}</td>
               <td style="font-size:0.85rem">${{escapeHtml(pr.team || '—')}}</td>
+              <td>${{srcBadge(pr.source)}}</td>
               <td>${{badge}}</td>
               <td style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem">${{escapeHtml(pr.merged_at || '—')}}</td>
               <td>${{link}}</td>
