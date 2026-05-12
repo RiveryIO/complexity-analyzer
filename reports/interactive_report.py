@@ -2297,7 +2297,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
             if (v === 'bitbucket') return '<span style="display:inline-block;font-size:0.7rem;font-family:\\'Syne\\',sans-serif;font-weight:600;padding:0.12rem 0.45rem;border-radius:4px;background:#e0e7ff;color:#4338ca">Bitbucket</span>';
             return '—';
           }};
-          let html = '<table class="dd-table"><thead><tr><th>PR</th><th>Developer</th><th>Team</th><th>Source</th><th>Complexity</th><th>Merged</th><th>Link</th></tr></thead><tbody>';
+          let html = '<table class="dd-table"><thead><tr><th>PR</th><th>Developer</th><th>Team</th><th>Repo</th><th>Source</th><th>Complexity</th><th>Merged</th><th>Link</th></tr></thead><tbody>';
           list.forEach(pr => {{
             const title = pr.title || pr.url || '—';
             const display = title.length > 70 ? title.slice(0, 70) + '…' : title;
@@ -2310,6 +2310,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
               <td class="cell-name" title="${{escapeHtml(title)}}"><span class="name-text">${{escapeHtml(display)}}</span></td>
               <td style="font-size:0.85rem">${{escapeHtml(pr.developer || '—')}}</td>
               <td style="font-size:0.85rem">${{escapeHtml(pr.team || '—')}}</td>
+              <td style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem">${{escapeHtml(pr.repo || '—')}}</td>
               <td>${{srcBadge(pr.source)}}</td>
               <td>${{badge}}</td>
               <td style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem">${{escapeHtml(pr.merged_at || '—')}}</td>
