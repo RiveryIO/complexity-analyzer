@@ -1198,7 +1198,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
           silent: true,
           symbol: 'none',
           lineStyle: {{ type: 'dashed', color: '#b45309', width: 1.5, opacity: 0.6 }},
-          label: {{ formatter: c.overall_avg + 'h avg', fontSize: 11, color: '#b45309', fontFamily: 'IBM Plex Mono, monospace' }},
+          label: {{ formatter: c.overall_avg + ' avg', fontSize: 11, color: '#b45309', fontFamily: 'IBM Plex Mono, monospace' }},
           data: [{{ yAxis: c.overall_avg }}],
         }};
       }}
@@ -1214,6 +1214,30 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       const chart = echarts.init(container);
       chart.setOption(opt);
       window.addEventListener('resize', () => chart.resize());
+      if (c.overall_avg != null && Array.isArray(c.y) && c.y.length) {{
+        const heroValId = container.id.replace(/^chart-/, 'hero-val-');
+        const heroEl = document.getElementById(heroValId);
+        const recomputeAvg = () => {{
+          const opt2 = chart.getOption();
+          const dz = (opt2.dataZoom && opt2.dataZoom[0]) || {{}};
+          const start = dz.start != null ? dz.start : 0;
+          const end = dz.end != null ? dz.end : 100;
+          const n = c.y.length;
+          const startIdx = Math.max(0, Math.floor(start / 100 * n));
+          const endIdx = Math.min(n, Math.ceil(end / 100 * n));
+          const slice = c.y.slice(startIdx, endIdx).filter(v => v != null && !isNaN(v));
+          if (!slice.length) return;
+          const avg = Math.round((slice.reduce((a, b) => a + b, 0) / slice.length) * 10) / 10;
+          if (heroEl) heroEl.textContent = avg;
+          chart.setOption({{ series: [{{ markLine: {{
+            silent: true, symbol: 'none',
+            lineStyle: {{ type: 'dashed', color: '#b45309', width: 1.5, opacity: 0.6 }},
+            label: {{ formatter: avg + ' avg', fontSize: 11, color: '#b45309', fontFamily: 'IBM Plex Mono, monospace' }},
+            data: [{{ yAxis: avg }}],
+          }} }}] }});
+        }};
+        chart.on('dataZoom', recomputeAvg);
+      }}
       return chart;
     }}
 
@@ -2006,8 +2030,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         const spanStyle = hasPicker ? ' style="grid-column:1/-1"' : '';
         const drillHint = isDrill ? '<div class="drill-hint">\u25B6 Click chart to view features</div>' : '';
         const heroUnit = c.overall_avg_unit || 'hrs avg';
+        const heroValId = 'hero-val-' + key + '-' + idx;
         const heroStat = c.overall_avg != null
-          ? `<span class="hero-stat"><span class="hero-val">${{c.overall_avg}}</span><span class="hero-unit">${{heroUnit}}</span></span>`
+          ? `<span class="hero-stat"><span class="hero-val" id="${{heroValId}}">${{c.overall_avg}}</span><span class="hero-unit">${{heroUnit}}</span></span>`
           : '';
         return `<div id="${{anchorId}}" class="${{cardClass}}" data-chart-idx="${{idx}}" data-chart-tab="${{key}}"><h3${{spanStyle}}>${{c.title}}</h3><div class="sub"${{spanStyle}}>${{c.subtitle || ''}}${{heroStat}}</div><div id="${{id}}" class="chart-container"></div>${{drillHint}}${{pickerHtml}}</div>`;
       }}

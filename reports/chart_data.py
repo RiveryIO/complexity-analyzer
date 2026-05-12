@@ -344,6 +344,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
     rolling = weekly_avg.rolling(4, min_periods=1).mean()
     if not rolling.empty:
         labels = [d.strftime("%Y-%m-%d") for d in rolling.index]
+        rolling_avg = round(float(rolling.mean()), 1)
         charts.append({
             "id": "03",
             "type": "line",
@@ -351,6 +352,8 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "subtitle": "Smoothed avg complexity",
             "x": labels,
             "y": rolling.tolist(),
+            "overall_avg": rolling_avg,
+            "overall_avg_unit": "cx avg",
             "_section": "Quality & Cycle Time",
         })
 
