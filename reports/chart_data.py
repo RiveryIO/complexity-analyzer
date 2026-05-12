@@ -466,7 +466,9 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
     dev_col = "developer" if "developer" in df.columns else "author"
     df["_dev"] = df.get(dev_col, pd.Series([""] * len(df))).fillna("").astype(str)
     team_total = df.groupby("team")["complexity"].sum()
-    team_count = df[df["_dev"] != ""].groupby("team")["_dev"].nunique().reindex(team_total.index, fill_value=1).replace(0, 1)
+    departed = _departed_developers()
+    active_for_count = df[(df["_dev"] != "") & (~df["_dev"].isin(departed))]
+    team_count = active_for_count.groupby("team")["_dev"].nunique().reindex(team_total.index, fill_value=1).replace(0, 1)
     normalized = (team_total / team_count.fillna(1)).sort_values(ascending=False)
     if not normalized.empty:
         charts.append({
@@ -633,7 +635,9 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                     })
 
         # 06: Scatter
-        agg = tdf.groupby("developer").agg(pr_count=("pr_url", "count"), total_complexity=("complexity", "sum"))
+        departed = _departed_developers()
+        scatter_df = tdf[~tdf["developer"].isin(departed)] if departed else tdf
+        agg = scatter_df.groupby("developer").agg(pr_count=("pr_url", "count"), total_complexity=("complexity", "sum"))
         if len(agg) >= 2:
             charts.append({
                 "id": f"06-{team}",
@@ -773,6 +777,9 @@ def _extract_fairness(df: pd.DataFrame) -> List[Dict[str, Any]]:
     # 11: PR count vs avg complexity (scatter with labels)
     df["developer"] = df.get("developer", df.get("author", "")).fillna("").astype(str)
     df = df[df["developer"] != ""]
+    departed = _departed_developers()
+    if departed:
+        df = df[~df["developer"].isin(departed)]
     if len(df) >= 2:
         agg = df.groupby("developer").agg(pr_count=("pr_url", "count"), avg_complexity=("complexity", "mean"))
         if len(agg) >= 2:
@@ -913,6 +920,9 @@ def _extract_leaderboard(df: pd.DataFrame) -> Dict[str, Any]:
     df = df.dropna(subset=["_date"])
     df["approved_by"] = df["approved_by"].fillna("").astype(str).str.strip()
     df["complexity"] = pd.to_numeric(df["complexity"], errors="coerce").fillna(0)
+    departed = _departed_developers()
+    if departed:
+        df = df[~df["approved_by"].isin(departed)]
 
     mapping = load_team_mapping()
     now = pd.Timestamp.now(tz="UTC")
