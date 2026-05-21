@@ -782,6 +782,7 @@ def write_csv_row(
                         normalized["team"] = str(row.get("team") or "").strip()
                         normalized["merged_at"] = str(row.get("merged_at") or "").strip()
                         normalized["created_at"] = str(row.get("created_at") or "").strip()
+                        normalized["ready_for_review_at"] = str(row.get("ready_for_review_at") or "").strip()
                         normalized["lines_added"] = str(row.get("lines_added") or "").strip()
                         normalized["lines_deleted"] = str(row.get("lines_deleted") or "").strip()
                         normalized["explanation"] = str(
@@ -824,6 +825,7 @@ def write_csv_row(
             "team": row.get("team", ""),
             "merged_at": row.get("merged_at", ""),
             "created_at": row.get("created_at", ""),
+            "ready_for_review_at": row.get("ready_for_review_at", ""),
             "lines_added": row.get("lines_added", ""),
             "lines_deleted": row.get("lines_deleted", ""),
             "explanation": row.get("explanation", ""),
@@ -924,6 +926,7 @@ def run_batch_analysis(
         team = get_team_for_developer(author)
         merged_at = result.get("merged_at") or ""
         created_at = result.get("created_at") or ""
+        ready_for_review_at = result.get("ready_for_review_at") or ""
         date = merged_at[:10] if merged_at else ""
         lines_added = result.get("lines_added")
         lines_deleted = result.get("lines_deleted")
@@ -946,6 +949,7 @@ def run_batch_analysis(
             team=team,
             merged_at=merged_at,
             created_at=created_at,
+            ready_for_review_at=ready_for_review_at,
             lines_added=lines_added,
             lines_deleted=lines_deleted,
             approved_by=approved_by,
@@ -1063,6 +1067,7 @@ def _backfill_labeled_pr(
     author = ""
     merged_at = ""
     created_at = ""
+    ready_for_review_at = ""
     date = ""
     lines_added = None
     lines_deleted = None
@@ -1078,6 +1083,7 @@ def _backfill_labeled_pr(
                 author = meta.get("author", "")
                 merged_at = meta.get("merged_at", "")
                 created_at = meta.get("created_at", "")
+                ready_for_review_at = meta.get("ready_for_review_at") or ""
         else:
             from .github import fetch_pr_metadata
 
@@ -1092,6 +1098,7 @@ def _backfill_labeled_pr(
             author = (meta.get("user") or {}).get("login", "")
             merged_at = meta.get("merged_at") or ""
             created_at = meta.get("created_at") or ""
+            ready_for_review_at = meta.get("ready_for_review_at") or ""
             lines_added = meta.get("additions")
             lines_deleted = meta.get("deletions")
     except Exception as e:
@@ -1110,6 +1117,7 @@ def _backfill_labeled_pr(
         team=team,
         merged_at=merged_at,
         created_at=created_at,
+        ready_for_review_at=ready_for_review_at,
         lines_added=lines_added,
         lines_deleted=lines_deleted,
         source=pr_provider,
@@ -1360,6 +1368,7 @@ def run_batch_analysis_with_labels(
                     team = get_team_for_developer(author)
                     merged_at = result.get("merged_at") or ""
                     created_at = result.get("created_at") or ""
+                    ready_for_review_at = result.get("ready_for_review_at") or ""
                     date = merged_at[:10] if merged_at else ""
                     lines_added = result.get("lines_added")
                     lines_deleted = result.get("lines_deleted")
@@ -1376,6 +1385,7 @@ def run_batch_analysis_with_labels(
                             team=team,
                             merged_at=merged_at,
                             created_at=created_at,
+                            ready_for_review_at=ready_for_review_at,
                             lines_added=lines_added,
                             lines_deleted=lines_deleted,
                             source=result.get("source"),
@@ -1426,6 +1436,7 @@ def run_batch_analysis_with_labels(
                             team = get_team_for_developer(author)
                             merged_at = result.get("merged_at") or ""
                             created_at = result.get("created_at") or ""
+                            ready_for_review_at = result.get("ready_for_review_at") or ""
                             date = merged_at[:10] if merged_at else ""
                             lines_added = result.get("lines_added")
                             lines_deleted = result.get("lines_deleted")
@@ -1442,6 +1453,7 @@ def run_batch_analysis_with_labels(
                                     team=team,
                                     merged_at=merged_at,
                                     created_at=created_at,
+                                    ready_for_review_at=ready_for_review_at,
                                     lines_added=lines_added,
                                     lines_deleted=lines_deleted,
                                     source=result.get("source"),

@@ -194,6 +194,7 @@ def analyze_pr_to_dict(
     # Extract metadata for CSV (merged_at, created_at, additions, deletions)
     merged_at = meta.get("merged_at") or ""
     created_at = meta.get("created_at") or ""
+    ready_for_review_at = meta.get("ready_for_review_at") or ""
     additions = meta.get("additions")
     deletions = meta.get("deletions")
 
@@ -212,6 +213,7 @@ def analyze_pr_to_dict(
         "title": title,
         "merged_at": merged_at,
         "created_at": created_at,
+        "ready_for_review_at": ready_for_review_at,
         "lines_added": additions,
         "lines_deleted": deletions,
         "source": pr_source,

@@ -6,7 +6,21 @@ from typing import Any, Dict, List
 import numpy as np
 import pandas as pd
 
+from cli.business_time import business_hours_vector
 from cli.team_config import get_weekly_headcounts, load_developer_tenure, load_team_mapping
+
+
+def _compute_cycle_hours(cdf: pd.DataFrame) -> pd.Series:
+    """Business hours (IL: Fri+Sat off, holidays off) between created_at (or
+    ready_for_review_at if present) and merged_at. Returns a float Series."""
+    merged = pd.to_datetime(cdf["merged_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
+    created = pd.to_datetime(cdf["created_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
+    if "ready_for_review_at" in cdf.columns:
+        rfr = pd.to_datetime(cdf["ready_for_review_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
+        start = rfr.fillna(created)
+    else:
+        start = created
+    return business_hours_vector(start, merged)
 
 
 def _departed_developers(cutoff_days: int = 60) -> "set[str]":
@@ -143,9 +157,8 @@ def _build_cycle_time_prs(df: pd.DataFrame) -> Dict[str, Any]:
     if cdf.empty:
         return {}
 
-    created = pd.to_datetime(cdf["created_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
     merged = pd.to_datetime(cdf["merged_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
-    cdf["_cycle_hours"] = (merged - created).dt.total_seconds() / 3600
+    cdf["_cycle_hours"] = _compute_cycle_hours(cdf)
     cdf = cdf[cdf["_cycle_hours"] >= 0]
     if cdf.empty:
         return {}
@@ -360,7 +373,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
     # 19: Avg merge cycle time (line)
     if "created_at" in df.columns and "merged_at" in df.columns:
         cdf = df.dropna(subset=["created_at", "merged_at"]).copy()
-        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"], format="mixed", utc=False, errors="coerce") - pd.to_datetime(cdf["created_at"], format="mixed", utc=False, errors="coerce")).dt.total_seconds() / 3600
+        cdf["cycle_hours"] = _compute_cycle_hours(cdf)
         cdf = cdf[cdf["cycle_hours"] >= 0]
         if not cdf.empty:
             merged = pd.to_datetime(cdf["merged_at"], format="mixed", utc=False, errors="coerce")
@@ -375,7 +388,7 @@ def _extract_basic(df: pd.DataFrame) -> List[Dict[str, Any]]:
                     "id": "19",
                     "type": "line",
                     "title": "Average Merge Cycle Time (by Week)",
-                    "subtitle": "created_at → merged_at in hours · click a dot to see PRs",
+                    "subtitle": "Working hrs (IL, ex weekend/holiday/draft) · click a dot to see PRs",
                     "overall_avg": overall_avg,
                     "x": labels,
                     "y": weekly_cycle.tolist(),
@@ -487,7 +500,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
     # 20: Avg merge cycle time by team
     if "created_at" in df.columns and "merged_at" in df.columns:
         cdf = df.dropna(subset=["created_at", "merged_at"]).copy()
-        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"], format="mixed", utc=False, errors="coerce") - pd.to_datetime(cdf["created_at"], format="mixed", utc=False, errors="coerce")).dt.total_seconds() / 3600
+        cdf["cycle_hours"] = _compute_cycle_hours(cdf)
         cdf = cdf[cdf["cycle_hours"] >= 0]
         if not cdf.empty:
             team_avg = cdf.groupby("team")["cycle_hours"].mean().sort_values(ascending=False)
@@ -495,7 +508,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "id": "20",
                 "type": "bar",
                 "title": "Average Merge Cycle Time per Team",
-                "subtitle": "Hours from creation to merge",
+                "subtitle": "Avg working hrs to merge (IL, ex weekend/holiday/draft)",
                 "_subtab": "All",
                 "x": team_avg.index.tolist(),
                 "y": team_avg.tolist(),
@@ -504,14 +517,14 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
     # 14: Complexity vs cycle time (scatter)
     if "created_at" in df.columns and "merged_at" in df.columns:
         cdf = df.dropna(subset=["created_at", "merged_at"]).copy()
-        cdf["cycle_hours"] = (pd.to_datetime(cdf["merged_at"], format="mixed", utc=False, errors="coerce") - pd.to_datetime(cdf["created_at"], format="mixed", utc=False, errors="coerce")).dt.total_seconds() / 3600
+        cdf["cycle_hours"] = _compute_cycle_hours(cdf)
         cdf = cdf[cdf["cycle_hours"] >= 0]
         if len(cdf) >= 2:
             charts.append({
                 "id": "14",
                 "type": "scatter",
                 "title": "Complexity vs Cycle Time",
-                "subtitle": "PR complexity vs hours to merge",
+                "subtitle": "PR complexity vs working hrs to merge (IL, ex weekend/holiday/draft)",
                 "_subtab": "All",
                 "data": [[float(r["complexity"]), float(r["cycle_hours"])] for _, r in cdf.iterrows()],
                 "xAxisName": "Complexity",
@@ -611,10 +624,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
         # 19-T: Avg merge cycle time (by week) for this team
         if "created_at" in tdf.columns and "merged_at" in tdf.columns:
             ctdf = tdf.dropna(subset=["created_at", "merged_at"]).copy()
-            ctdf["cycle_hours"] = (
-                pd.to_datetime(ctdf["merged_at"], format="mixed", utc=False, errors="coerce")
-                - pd.to_datetime(ctdf["created_at"], format="mixed", utc=False, errors="coerce")
-            ).dt.total_seconds() / 3600
+            ctdf["cycle_hours"] = _compute_cycle_hours(ctdf)
             ctdf = ctdf[ctdf["cycle_hours"] >= 0]
             if not ctdf.empty:
                 merged = pd.to_datetime(ctdf["merged_at"], format="mixed", utc=False, errors="coerce")
@@ -629,7 +639,7 @@ def _extract_team(df: pd.DataFrame) -> List[Dict[str, Any]]:
                         "id": f"19-{team}",
                         "type": "line",
                         "title": f"Average Merge Cycle Time — {team}",
-                        "subtitle": "created_at → merged_at in hours · click a dot to see PRs",
+                        "subtitle": "Working hrs (IL, ex weekend/holiday/draft) · click a dot to see PRs",
                         "_subtab": team,
                         "overall_avg": overall_avg,
                         "x": labels,

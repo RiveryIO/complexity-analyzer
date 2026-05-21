@@ -502,6 +502,13 @@ def fetch_pr_metadata(
         # Fetch all files (paginated)
         files = _fetch_all_pr_files(owner, repo, pr, token=token, timeout=timeout)
         meta["files"] = files
+        # Best-effort: enrich with ready_for_review_at if the PR was ever a draft.
+        try:
+            meta["ready_for_review_at"] = fetch_ready_for_review_at(
+                owner, repo, pr, token=token, timeout=timeout
+            )
+        except Exception:
+            meta["ready_for_review_at"] = None
         return meta
     except httpx.HTTPStatusError as e:
         raise GitHubAPIError(
@@ -511,6 +518,45 @@ def fetch_pr_metadata(
         )
     except httpx.RequestError as e:
         raise RuntimeError(f"Failed to fetch PR metadata: {e}")
+
+
+def fetch_ready_for_review_at(
+    owner: str,
+    repo: str,
+    pr: int,
+    token: Optional[str] = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> Optional[str]:
+    """Return ISO timestamp when a draft PR became ready for review, else None.
+
+    Calls /repos/{owner}/{repo}/issues/{pr}/events and picks the latest
+    `ready_for_review` event. Returns None if the PR was never a draft.
+    """
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr}/events"
+    headers = build_github_headers(token)
+    timestamps: List[str] = []
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            page = 1
+            while True:
+                resp = client.get(url, headers=headers, params={"per_page": 100, "page": page})
+                if resp.status_code == 404:
+                    return None
+                resp.raise_for_status()
+                events = resp.json()
+                if not events:
+                    break
+                for ev in events:
+                    if ev.get("event") == "ready_for_review" and ev.get("created_at"):
+                        timestamps.append(ev["created_at"])
+                if len(events) < 100:
+                    break
+                page += 1
+    except httpx.HTTPStatusError as e:
+        raise GitHubAPIError(e.response.status_code, e.response.text[:500], url)
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to fetch PR events: {e}")
+    return max(timestamps) if timestamps else None
 
 
 def fetch_first_approver(

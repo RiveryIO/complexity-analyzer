@@ -7,8 +7,20 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from cli.business_time import business_hours_vector
 from cli.team_config import get_weekly_headcounts
 from reports.validation import has_plottable_agg, has_plottable_series, validate_png_has_content
+
+
+def _cycle_hours(df: pd.DataFrame) -> pd.Series:
+    merged = pd.to_datetime(df["merged_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
+    created = pd.to_datetime(df["created_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
+    if "ready_for_review_at" in df.columns:
+        rfr = pd.to_datetime(df["ready_for_review_at"], format="mixed", utc=True, errors="coerce").dt.tz_localize(None)
+        start = rfr.fillna(created)
+    else:
+        start = created
+    return business_hours_vector(start, merged)
 
 
 def _ensure_date(df: pd.DataFrame) -> pd.DataFrame:
@@ -142,9 +154,7 @@ def report_avg_merge_cycle_time(df: pd.DataFrame, output_dir: Path) -> Optional[
         return None
     df = df.copy()
     df = df.dropna(subset=["created_at", "merged_at"])
-    df["cycle_hours"] = (
-        pd.to_datetime(df["merged_at"]) - pd.to_datetime(df["created_at"])
-    ).dt.total_seconds() / 3600
+    df["cycle_hours"] = _cycle_hours(df)
     df = df[df["cycle_hours"] >= 0]
     if df.empty:
         return None

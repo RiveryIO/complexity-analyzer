@@ -107,17 +107,90 @@ def fetch_bb_pr_metadata(
     if raw.get("state") == "MERGED":
         merged_at = raw.get("updated_on") or ""
 
+    # Best-effort: pull ready_for_review_at from activity log if PR was ever a draft.
+    ready_for_review_at: Optional[str] = None
+    if not raw.get("draft", False):
+        try:
+            ready_for_review_at = fetch_bb_ready_for_review_at(
+                workspace, repo, pr_id, email, token, timeout
+            )
+        except Exception:
+            ready_for_review_at = None
+
     return {
         "title": raw.get("title") or "",
         "user": {"login": username},
         "created_at": raw.get("created_on") or "",
         "merged_at": merged_at,
+        "ready_for_review_at": ready_for_review_at,
         "additions": additions,
         "deletions": deletions,
         "changed_files": 0,
         "files": [],
         "_bb_raw": raw,
     }
+
+
+def fetch_bb_ready_for_review_at(
+    workspace: str,
+    repo: str,
+    pr_id: int,
+    email: str,
+    token: str,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> Optional[str]:
+    """Return ISO timestamp when a draft Bitbucket PR became ready for review, else None.
+
+    Scans /pullrequests/{id}/activity in two ways:
+    1. Look for an update entry whose `changes.draft` transitions True → False.
+    2. Fallback: if any earlier update has `draft == True`, treat the first
+       subsequent `draft == False` update as the ready-for-review moment.
+    Returns None if no such transition exists.
+    """
+    url = f"{BITBUCKET_API_BASE_URL}/repositories/{workspace}/{repo}/pullrequests/{pr_id}/activity"
+    auth = _build_auth(email, token)
+    direct_hits: List[str] = []
+    updates: List[Tuple[str, Optional[bool]]] = []  # (date, draft_state) in fetched order
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            while url:
+                resp = client.get(url, auth=auth)
+                if resp.status_code == 404:
+                    return None
+                resp.raise_for_status()
+                payload = resp.json()
+                for entry in payload.get("values", []):
+                    update = entry.get("update") or {}
+                    if not update:
+                        continue
+                    changes = update.get("changes") or {}
+                    draft_change = changes.get("draft") or {}
+                    old = str(draft_change.get("old", "")).lower()
+                    new = str(draft_change.get("new", "")).lower()
+                    ts = update.get("date") or ""
+                    if old == "true" and new == "false" and ts:
+                        direct_hits.append(ts)
+                    draft_state = update.get("draft")
+                    if isinstance(draft_state, bool) and ts:
+                        updates.append((ts, draft_state))
+                url = payload.get("next")
+    except httpx.HTTPStatusError as e:
+        raise BitbucketAPIError(e.response.status_code, e.response.text[:500], url or "")
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Failed to fetch BB PR activity: {e}")
+
+    if direct_hits:
+        return max(direct_hits)
+
+    # Fallback: order chronologically, find first False after a True.
+    updates.sort()  # ascending by date
+    saw_draft = False
+    for ts, is_draft in updates:
+        if is_draft:
+            saw_draft = True
+        elif saw_draft and not is_draft:
+            return ts
+    return None
 
 
 def fetch_bb_pr(
