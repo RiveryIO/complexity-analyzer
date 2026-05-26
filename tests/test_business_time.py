@@ -12,7 +12,9 @@ def _dt(s: str) -> datetime:
 
 def test_same_workday_returns_elapsed_hours():
     # Sunday (workday in IL) 09:00 -> 13:30 = 4.5h
-    assert business_hours_between(_dt("2025-11-23 09:00"), _dt("2025-11-23 13:30")) == pytest.approx(4.5)
+    assert business_hours_between(
+        _dt("2025-11-23 09:00"), _dt("2025-11-23 13:30")
+    ) == pytest.approx(4.5)
 
 
 def test_skips_friday_and_saturday():

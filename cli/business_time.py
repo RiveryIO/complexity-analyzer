@@ -4,6 +4,7 @@ Excludes Israeli weekends (Fri+Sat) and Israeli national holidays.
 Timestamps are treated as naive Asia/Jerusalem local time, matching the
 tz-stripping that already happens in reports/chart_data.py.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta

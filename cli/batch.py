@@ -782,7 +782,9 @@ def write_csv_row(
                         normalized["team"] = str(row.get("team") or "").strip()
                         normalized["merged_at"] = str(row.get("merged_at") or "").strip()
                         normalized["created_at"] = str(row.get("created_at") or "").strip()
-                        normalized["ready_for_review_at"] = str(row.get("ready_for_review_at") or "").strip()
+                        normalized["ready_for_review_at"] = str(
+                            row.get("ready_for_review_at") or ""
+                        ).strip()
                         normalized["lines_added"] = str(row.get("lines_added") or "").strip()
                         normalized["lines_deleted"] = str(row.get("lines_deleted") or "").strip()
                         normalized["explanation"] = str(
