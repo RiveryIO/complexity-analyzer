@@ -27,8 +27,8 @@ def test_verify_settings_csv_exists(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     csv_file = tmp_path / "report.csv"
     csv_file.write_text(
-        "pr_url,complexity,developer,date,team,merged_at,created_at,lines_added,lines_deleted,explanation,source,approved_by,pr_title\n"
-        "https://github.com/org/repo/pull/1,5,alice,2024-01-15,Platform,,,100,50,Test,github,bob,Test PR\n"
+        "pr_url,complexity,developer,date,team,merged_at,created_at,ready_for_review_at,lines_added,lines_deleted,explanation,source,approved_by,pr_title\n"
+        "https://github.com/org/repo/pull/1,5,alice,2024-01-15,Platform,,,,100,50,Test,github,bob,Test PR\n"
     )
     results = run_verify_settings(csv_path=csv_file)
     csv_check = next((r for r in results if r[0] == "CSV path"), None)
