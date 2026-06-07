@@ -12,8 +12,14 @@ export TIKTOKEN_CACHE_DIR="/Users/ohadperry/.cache/tiktoken-persistent"
 export SSL_CERT_FILE="/Users/ohadperry/.ssl/combined_certs.pem"
 export REQUESTS_CA_BUNDLE="/Users/ohadperry/.ssl/combined_certs.pem"
 
-REPO_DIR="/Users/ohadperry/Documents/Dev/complexity-analyzer"
-LOG_FILE="$REPO_DIR/logs/launchd-sync.log"
+# Self-locating: operate on the repo this script actually lives in, never a
+# hardcoded path. (A hardcoded REPO_DIR is how an old ~/dev copy ended up
+# committing into ~/Documents/Dev — see scripts/monitor-commit-freshness.sh.)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Log to ~/Library/Logs (NOT ~/Documents — that path is TCC-protected and the
+# launchd append intermittently fails with EINTR / "Interrupted system call").
+LOG_FILE="$HOME/Library/Logs/complexity-sync.log"
 TOKEN_FILE="$HOME/.config/gh-token"
 
 cd "$REPO_DIR"
@@ -55,12 +61,16 @@ if [ -n "$changed_files" ]; then
   /usr/bin/git add $changed_files
   /usr/bin/git commit -m "chore: daily sync — $labeled new PRs labeled, $jira_new jira features added (total PRs: $total)" >> "$LOG_FILE" 2>&1
 
-  # Push using token from file — osxkeychain credential helper is unreliable
-  # from launchd. Fall back to origin remote if token file missing.
+  # Push to the NAMED 'origin' remote so the local origin/main tracking ref
+  # advances (an ad-hoc token URL pushes fine but leaves `git status` stuck at
+  # "ahead N" forever). osxkeychain is unavailable under launchd, so the token
+  # is injected as a one-shot HTTP Authorization header — never persisted to
+  # .git/config and not embedded in the remote URL.
   if [ -r "$TOKEN_FILE" ]; then
     GH_TOKEN_VALUE=$(tr -d '\n\r' < "$TOKEN_FILE")
-    PUSH_URL="https://x-access-token:${GH_TOKEN_VALUE}@github.com/RiveryIO/complexity-analyzer.git"
-    if /usr/bin/git push "$PUSH_URL" main >> "$LOG_FILE" 2>&1; then
+    AUTH_B64=$(printf 'x-access-token:%s' "$GH_TOKEN_VALUE" | base64 | tr -d '\n')
+    if /usr/bin/git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_B64}" \
+         push origin main >> "$LOG_FILE" 2>&1; then
       push_status="pushed"
     else
       push_status="push-failed"
